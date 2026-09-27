@@ -102,3 +102,15 @@ def test_null_start_date_is_skipped(db):
     assert rows_t == []
     assert rows_e == []
     assert all(r["kind"] is None for r in raw)
+
+def test_future_trip_not_counted(db):
+    """還沒去的（start_date 在未來）不算旅行也不算事件。"""
+    future = int(time.time()) + 86400 * 100
+    _make_trip("C1", future, future + 86400 * 7, "韓國小滑雪")
+    past = 1700000000
+    _make_trip("C1", past, past + 86400 * 2, "已去過")
+    with get_conn() as conn:
+        rows_t = _cp_trip(conn, "C1", "all")["rows"]
+        rows_e = _cp_event(conn, "C1", "all")["rows"]
+    assert len(rows_t) == 1 and rows_t[0]["value"] == 1
+    assert rows_e == []

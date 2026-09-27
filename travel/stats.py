@@ -21,8 +21,10 @@ def get_dashboard_data(group_id: str, days: int = 30, period: str = "all") -> di
             f"SELECT COUNT(DISTINCT user_id) FROM messages WHERE group_id=?{pf} AND user_id NOT LIKE 'imported:%'",
             (group_id, *pp),
         ).fetchone()[0]
+        # 進行中＝還沒按結束、且開始日已到（規劃中的未來旅程不算）
         active_trips = conn.execute(
-            "SELECT COUNT(*) FROM trips WHERE group_id=? AND status='planning'", (group_id,)
+            """SELECT COUNT(*) FROM trips WHERE group_id=? AND status='planning'
+                 AND start_date <= CAST(strftime('%s', 'now') AS INTEGER)""", (group_id,)
         ).fetchone()[0]
         active_days = conn.execute(
             f"""SELECT COUNT(DISTINCT date(timestamp/1000, 'unixepoch', 'localtime'))

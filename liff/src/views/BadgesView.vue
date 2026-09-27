@@ -22,6 +22,12 @@
     </div>
 
     <EmptyState
+      v-else-if="error"
+      icon="⚠️"
+      title="載入失敗"
+      :description="error"
+    />
+    <EmptyState
       v-else-if="badges.length === 0"
       icon="🏅"
       title="尚未獲得任何勳章"
@@ -44,10 +50,11 @@ import EmptyState from '@/components/EmptyState.vue'
 const auth = useAuthStore()
 const badges = ref<any[]>([])
 const loading = ref(true)
+const error = ref('')
 
 onMounted(async () => {
   try { badges.value = await api.badges(auth.userId) }
-  catch (e) { console.error(e) }
+  catch (e: any) { error.value = e?.message || '請求失敗'; console.error(e) }
   finally { loading.value = false }
 })
 </script>

@@ -29,13 +29,13 @@
               v-for="(pair, i) in data.best_pairs"
               :key="i"
               class="flex items-center px-4 py-3.5 gap-2 transition-colors hover:bg-slate-50/80"
-              :class="i === 0 ? 'bg-accent-50/40' : ''"
+              :class="pairRanks[i] === 1 ? 'bg-accent-50/40' : ''"
             >
               <span
                 class="text-xs w-6 text-center font-bold tabular-nums"
-                :class="i === 0 ? 'text-accent-600' : 'text-slate-400'"
+                :class="pairRanks[i] === 1 ? 'text-accent-600' : 'text-slate-400'"
               >
-                {{ i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1 }}
+                {{ medal(pairRanks[i]) }}
               </span>
               <span class="flex-1 text-xs font-bold text-slate-800 truncate">
                 {{ pair.user1_name || pair.user1_id }}
@@ -71,7 +71,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { competitionRanks, medal } from '@/utils/rank'
 import * as d3 from 'd3'
 import { api } from '@/api/client'
 import { useRefreshOnAnalysis } from '@/composables/useRefreshOnAnalysis'
@@ -80,6 +81,8 @@ import EmptyState from '@/components/EmptyState.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
 
 const data = ref<any>(null)
+// 同分同名次
+const pairRanks = computed(() => competitionRanks(data.value?.best_pairs || [], (p: any) => p.count))
 const loading = ref(true)
 const error = ref('')
 const svgRef = ref<SVGSVGElement | null>(null)

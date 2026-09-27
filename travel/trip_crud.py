@@ -7,6 +7,11 @@ from travel.db import get_conn
 from travel.trip_types import normalize_trip_types, parse_trip_types
 
 
+def _check_dates(start_date: int | None, end_date: int | None) -> None:
+    if start_date and end_date and int(end_date) < int(start_date):
+        raise ValueError("結束日期不能早於開始日期")
+
+
 def create_trip(
     group_id: str,
     title: str,
@@ -18,6 +23,9 @@ def create_trip(
     custom_emoji: str | None = None,
 ) -> str:
     """建立旅行/事件，回傳 trip_id（UUID）。trip_types 正規化成 JSON 陣列字串儲存。"""
+    if not start_date:
+        raise ValueError("缺少開始日期")
+    _check_dates(start_date, end_date)
     trip_id = str(uuid.uuid4())
     now = int(time.time())
     trip_type = normalize_trip_types(trip_types)
@@ -142,6 +150,9 @@ def update_trip(
     if start_date is not None:
         updates.append("start_date = ?")
         params.append(int(start_date))
+
+    _check_dates(start_date if start_date is not None else old_trip.get("start_date"),
+                 old_trip.get("end_date") if end_date == "__KEEP__" else end_date)
 
     if end_date != "__KEEP__":
         updates.append("end_date = ?")

@@ -152,6 +152,12 @@ def test_topics_weekly_trend(temp_db):
 
 
 # ─── 精選語錄（highlight_quotes）────────────────────────────────────────────
+# 不打 LLM：評審回空 → 走規則版（正負各半、每人最多 2 則）
+
+@pytest.fixture(autouse=True)
+def _no_llm_curation(monkeypatch):
+    monkeypatch.setattr("travel.quotes._curate", lambda pool: [])
+
 
 def test_quotes_filter_out_pure_url_and_short_ack(temp_db):
     from travel.stats_extended import get_topics_data
@@ -182,7 +188,7 @@ def test_quotes_same_window_only_one_representative(temp_db):
                         timestamp=ts + i * 1000, content=text, sentiment=0.9)
     data = get_topics_data("g1")
     quotes = [q["content"] for q in data["highlight_quotes"]]
-    # 同一 10 分鐘視窗內只留最長的一則
+    # 同一 10 分鐘視窗內只留一則（同分留最長的）
     assert len(quotes) == 1
     assert quotes[0] == "這個太扯了吧"
 
@@ -192,11 +198,11 @@ def test_quotes_pos_neg_balanced(temp_db):
     ts = 1735693200000
     with get_conn() as conn:
         for i in range(5):
-            _insert_msg(conn, msg_id=f"pos{i}", user_id="uA", user_name="A",
+            _insert_msg(conn, msg_id=f"pos{i}", user_id=f"uP{i}", user_name=f"P{i}",
                         timestamp=ts + i * 3600000,
                         content=f"今天超開心的第{i}天", sentiment=0.7 + i * 0.05)
         for i in range(5):
-            _insert_msg(conn, msg_id=f"neg{i}", user_id="uA", user_name="A",
+            _insert_msg(conn, msg_id=f"neg{i}", user_id=f"uN{i}", user_name=f"N{i}",
                         timestamp=ts + (10 + i) * 3600000,
                         content=f"這天氣爛到想哭第{i}天", sentiment=-0.7 - i * 0.05)
     data = get_topics_data("g1")
@@ -212,7 +218,7 @@ def test_quotes_balance_fills_from_other_side(temp_db):
     ts = 1735693200000
     with get_conn() as conn:
         for i in range(8):
-            _insert_msg(conn, msg_id=f"pos{i}", user_id="uA", user_name="A",
+            _insert_msg(conn, msg_id=f"pos{i}", user_id=f"uP{i}", user_name=f"P{i}",
                         timestamp=ts + i * 3600000,
                         content=f"超讚的第{i}趟旅程", sentiment=0.6 + i * 0.05)
         _insert_msg(conn, msg_id="neg1", user_id="uA", user_name="A",
@@ -438,3 +444,17 @@ def test_compare_identical_users_high_similarity(temp_db):
     data = get_compare_data("g1", "uA", "uB")
     # 兩人資料完全對稱 → 相似度應很高
     assert data["similarity"] >= 90
+
+
+def test_quotes_per_person_cap_and_long_copypasta_excluded(temp_db):
+    from travel.stats_extended import get_topics_data
+    ts = 1735693200000
+    with get_conn() as conn:
+        for i in range(5):
+            _insert_msg(conn, msg_id=f"a{i}", user_id="uA", user_name="A",
+                        timestamp=ts + i * 3600000, content=f"A 的第{i}句經典發言", sentiment=0.9)
+        _insert_msg(conn, msg_id="long", user_id="uB", user_name="B", timestamp=ts + 99 * 3600000,
+                    content="長篇複製文" * 30, sentiment=0.95)
+    quotes = get_topics_data("g1")["highlight_quotes"]
+    assert sum(q["user_name"] == "A" for q in quotes) == 2
+    assert all(q["user_name"] != "B" for q in quotes)

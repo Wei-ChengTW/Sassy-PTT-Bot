@@ -37,6 +37,17 @@ def _liff_button(label: str, uri: str, color: str = BLUE) -> FlexButton:
                       color=color, height="sm")
 
 
+def competition_ranks(values: list) -> list[int]:
+    """同分同名次、不跳號（1,1,2）：values 須已由高到低排好。"""
+    ranks: list[int] = []
+    for i, v in enumerate(values):
+        if i == 0:
+            ranks.append(1)
+        else:
+            ranks.append(ranks[-1] if v == values[i - 1] else ranks[-1] + 1)
+    return ranks
+
+
 def _rank_row(idx: int, name: str, value: str, color: str) -> FlexBox:
     medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(idx, f"{idx}.")
     return FlexBox(layout="baseline", spacing="sm", contents=[
@@ -68,7 +79,7 @@ def build_leaderboard_card(lead: dict, liff_url: str) -> FlexBubble:
     body = _empty_body("這段期間還沒有人發言 🙊")
     if rankings:
         body = []
-        for i, r in enumerate(rankings, 1):
+        for i, r in zip(competition_ranks([r.get("total", 0) for r in rankings]), rankings):
             body.append(_rank_row(i, r.get("user_name") or "路人",
                                   f"{r.get('total', 0)} 則", GOLD))
     return _bubble("🏆 發言排行", GOLD, body,
@@ -80,7 +91,7 @@ def build_nightowl_card(lead: dict, liff_url: str) -> FlexBubble:
     body = _empty_body("最近沒有人熬夜 🌙")
     if owls:
         body = [FlexText(text="凌晨 00:00–04:00 發言排行", size="xs", color="#999999")]
-        for i, r in enumerate(owls, 1):
+        for i, r in zip(competition_ranks([r.get("night_count", 0) for r in owls]), owls):
             body.append(_rank_row(i, r.get("user_name") or "路人",
                                   f"{r.get('night_count', 0)} 則", PURPLE))
     return _bubble("🦉 夜貓榜", PURPLE, body,
@@ -92,7 +103,7 @@ def build_pairs_card(inter: dict, liff_url: str) -> FlexBubble:
     body = _empty_body("還沒有麻吉互相 tag 💔")
     if pairs:
         body = []
-        for i, p in enumerate(pairs, 1):
+        for i, p in zip(competition_ranks([p.get("count", 0) for p in pairs]), pairs):
             names = f"{p.get('user1_name') or '路人'} 🤝 {p.get('user2_name') or '路人'}"
             body.append(_rank_row(i, names, f"{p.get('count', 0)} 次", ORANGE))
     return _bubble("🤝 最佳拍檔", ORANGE, body,
@@ -134,7 +145,7 @@ def build_board_card(board: dict, liff_url: str) -> FlexBubble:
     if board.get("subtitle"):
         body.append(FlexText(text=board["subtitle"], size="xs", color="#999999", wrap=True))
     if rows:
-        for i, r in enumerate(rows, 1):
+        for i, r in zip(competition_ranks([r.get("value") for r in rows]), rows):
             body.append(_rank_row(i, r.get("name") or "路人",
                                   r.get("value_str") or "", accent))
     else:

@@ -7,7 +7,8 @@
           <span>🌍 足跡探索地圖</span>
         </h1>
         <p class="text-xs text-slate-400 mt-0.5 font-medium">
-          已探索 <span class="font-bold font-mono text-brand-600">{{ mappedTrips.length }}</span> 個地點足跡
+          <span class="font-bold font-mono text-brand-600">{{ places.length }}</span> 個地點、
+          <span class="font-bold font-mono text-brand-600">{{ mappedTrips.length }}</span> 個回憶
         </p>
       </div>
       <button
@@ -22,6 +23,12 @@
     <!-- 地圖容器 -->
     <div class="flex-1 relative rounded-2xl overflow-hidden shadow-card border border-slate-200/80 bg-slate-100 min-h-[350px]">
       <div id="footprint-map" class="w-full h-full z-10" />
+      <div v-if="error" class="absolute inset-0 z-20 bg-white/90 flex items-center justify-center px-6 text-center">
+        <div>
+          <p class="text-3xl">⚠️</p>
+          <p class="text-xs text-slate-500 font-bold mt-2">載入足跡失敗：{{ error }}</p>
+        </div>
+      </div>
       <div v-if="loading" class="absolute inset-0 z-20 bg-white/70 backdrop-blur-xs flex items-center justify-center">
         <div class="text-center">
           <p class="text-3xl animate-bounce">🌍</p>
@@ -40,9 +47,11 @@ import { api } from '@/api/client'
 import { resolveLocationCoords } from '@/constants/locations'
 import { rarityOf } from '@/constants/rarity'
 import { emojiFor, labelFor } from '@/constants/tripTypes'
+import { tripPhase } from '@/constants/tripStatus'
 
 const trips = ref<any[]>([])
 const loading = ref(true)
+const error = ref('')
 let map: L.Map | null = null
 let markerLayer: L.LayerGroup | null = null
 
@@ -68,8 +77,9 @@ function initMap() {
 
   L.control.zoom({ position: 'bottomright' }).addTo(map)
 
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+  // CARTO 免費圖磚已改成需要 API key（只回「API KEY REQUIRED」浮水印），改用 OpenStreetMap
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
   }).addTo(map)
 
@@ -77,60 +87,99 @@ function initMap() {
   renderMarkers()
 }
 
+// 名稱等文字插進 Leaflet 的 HTML 前先跳脫
+function esc(text: unknown): string {
+  return String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!))
+}
+
+function tripDate(t: any): string {
+  return t.start_date ? new Date(t.start_date * 1000).toLocaleDateString('zh-TW') : ''
+}
+
+// 同一組座標的旅程合成一個圖釘（台北、內湖高中各有十幾趟，分開放會完全疊在一起）
+const places = computed(() => {
+  const byKey = new Map<string, { coords: [number, number]; trips: any[] }>()
+  for (const t of mappedTrips.value) {
+    const key = t.coords.join(',')
+    if (!byKey.has(key)) byKey.set(key, { coords: t.coords, trips: [] })
+    byKey.get(key)!.trips.push(t)
+  }
+  return [...byKey.values()].map((p) => ({
+    ...p,
+    trips: [...p.trips].sort((a, b) => (b.start_date || 0) - (a.start_date || 0)),
+  }))
+})
+
+function singlePopup(t: any): string {
+  const emoji = esc(t.custom_emoji || t.badge_emoji || '🎒')
+  const tagsHtml = (t.trip_types || [])
+    .map((ty: string) => `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-brand-50 text-[10px] text-brand-700 font-semibold border border-brand-100">${emojiFor(ty)} ${esc(labelFor(ty))}</span>`)
+    .join(' ')
+  const upcoming = tripPhase(t) === 'upcoming' ? ' · <span class="text-amber-600 font-bold">規劃中</span>' : ''
+  return `
+    <div class="p-1 max-w-[210px] font-sans">
+      <div class="flex items-center gap-1.5">
+        <span class="text-xl">${emoji}</span>
+        <p class="font-bold text-sm text-slate-900 leading-tight">${esc(t.title)}</p>
+      </div>
+      <p class="text-[11px] text-slate-500 font-medium mt-1">📍 ${esc(t.location || '群組回憶')}</p>
+      <p class="text-[10px] text-slate-400 font-mono mt-0.5">🗓️ ${tripDate(t)}${upcoming}</p>
+      <div class="mt-2 flex flex-wrap gap-1">${tagsHtml}</div>
+      <a href="/trips/${encodeURIComponent(t.id)}" class="mt-2.5 block w-full text-center bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-1.5 text-xs font-bold no-underline transition-colors shadow-xs">
+        查看事件詳情 →
+      </a>
+    </div>
+  `
+}
+
+function listPopup(trips: any[]): string {
+  const items = trips.map((t) => `
+    <a href="/trips/${encodeURIComponent(t.id)}" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50 no-underline">
+      <span class="text-base">${esc(t.custom_emoji || t.badge_emoji || '🎒')}</span>
+      <span class="flex-1 min-w-0">
+        <span class="block text-xs font-bold text-slate-800 truncate">${esc(t.title)}</span>
+        <span class="block text-[10px] text-slate-400 font-mono">${tripDate(t)}${tripPhase(t) === 'upcoming' ? ' · 規劃中' : ''}</span>
+      </span>
+    </a>`).join('')
+  return `
+    <div class="font-sans w-[220px]">
+      <p class="text-xs font-bold text-slate-600 px-2 pb-1.5">📍 ${esc(trips[0].location || '群組回憶')} · ${trips.length} 個回憶</p>
+      <div class="max-h-60 overflow-y-auto">${items}</div>
+    </div>
+  `
+}
+
 function renderMarkers() {
   if (!map || !markerLayer) return
   markerLayer.clearLayers()
-
   const bounds: L.LatLngBounds = L.latLngBounds([])
 
-  mappedTrips.value.forEach((t) => {
-    const rarity = rarityOf(t.rarity)
-    const emoji = t.custom_emoji || t.badge_emoji || '🎒'
-
-    // 客製 HTML Marker Icon
-    const customIcon = L.divIcon({
+  places.value.forEach(({ coords, trips }) => {
+    const top = trips[0]                       // 最新的一趟決定圖釘外觀
+    const rarity = rarityOf(top.rarity)
+    const emoji = esc(top.custom_emoji || top.badge_emoji || '🎒')
+    const countBadge = trips.length > 1
+      ? `<span class="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center border-2 border-white">${trips.length}</span>`
+      : `<span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${rarity.dot}"></span>`
+    const icon = L.divIcon({
       className: 'custom-map-pin',
       html: `
         <div class="relative flex items-center justify-center w-11 h-11 rounded-2xl shadow-lift border-2 border-white transition-all hover:scale-115 active:scale-95 cursor-pointer ${rarity.card}">
           <span class="text-2xl leading-none">${emoji}</span>
-          <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white ${rarity.dot}"></span>
+          ${countBadge}
         </div>
       `,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
       popupAnchor: [0, -24],
     })
-
-    const marker = L.marker(t.coords, { icon: customIcon })
-    
-    // Popup 內容
-    const dt = t.start_date ? new Date(t.start_date * 1000).toLocaleDateString('zh-TW') : ''
-    const tagsHtml = (t.trip_types || [])
-      .map((ty: string) => `<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-brand-50 text-[10px] text-brand-700 font-semibold border border-brand-100">${emojiFor(ty)} ${labelFor(ty)}</span>`)
-      .join(' ')
-
-    const popupContent = `
-      <div class="p-1 max-w-[210px] font-sans">
-        <div class="flex items-center gap-1.5">
-          <span class="text-xl">${emoji}</span>
-          <p class="font-bold text-sm text-slate-900 leading-tight">${t.title}</p>
-        </div>
-        <p class="text-[11px] text-slate-500 font-medium mt-1">📍 ${t.location || '群組回憶'}</p>
-        <p class="text-[10px] text-slate-400 font-mono mt-0.5">🗓️ ${dt}</p>
-        <div class="mt-2 flex flex-wrap gap-1">${tagsHtml}</div>
-        <a href="/trips/${t.id}" class="mt-2.5 block w-full text-center bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-1.5 text-xs font-bold no-underline transition-colors shadow-xs">
-          查看事件詳情 →
-        </a>
-      </div>
-    `
-    marker.bindPopup(popupContent, { closeButton: false, minWidth: 170 })
-    if (markerLayer) {
-      markerLayer.addLayer(marker)
-    }
-    bounds.extend(t.coords)
+    const marker = L.marker(coords, { icon })
+    marker.bindPopup(trips.length > 1 ? listPopup(trips) : singlePopup(top), { closeButton: false, minWidth: 170 })
+    markerLayer!.addLayer(marker)
+    bounds.extend(coords)
   })
 
-  if (mappedTrips.value.length && bounds.isValid()) {
+  if (places.value.length && bounds.isValid()) {
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 })
   }
 }
@@ -148,7 +197,8 @@ onMounted(async () => {
     trips.value = await api.trips()
     await nextTick()
     initMap()
-  } catch (e) {
+  } catch (e: any) {
+    error.value = e?.message || '請求失敗'
     console.error(e)
   } finally {
     loading.value = false

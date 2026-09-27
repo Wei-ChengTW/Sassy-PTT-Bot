@@ -121,8 +121,12 @@ def _write(id_to_msgids, results) -> int:
     n = 0
     with get_conn() as conn:
         for r in results:
-            wid = r.get("id")
-            if wid is None or wid not in id_to_msgids:
+            # 模型有時回字串 id（"166"），不轉型會比對不到 → 整批結果被默默丟掉
+            try:
+                wid = int(r.get("id"))
+            except (TypeError, ValueError):
+                continue
+            if wid not in id_to_msgids:
                 continue
             mids = id_to_msgids[wid]
             s = r.get("sentiment")
@@ -147,19 +151,28 @@ async def _run_group(group_id: str, only_null: bool, concurrency: int) -> dict:
         return {"group": group_id, "windows": 0, "written": 0}
     id_to_msgids = {w["id"]: w["msg_ids"] for w in windows}
     batches = [windows[i:i + WINDOWS_PER_CALL] for i in range(0, len(windows), WINDOWS_PER_CALL)]
-    client = AsyncOpenAI(base_url=BASE, api_key=KEY)
     sem = asyncio.Semaphore(concurrency)
-    done = {"written": 0}
+    done = {"written": 0, "failed": 0, "first_error": None}
 
-    async def worker(batch):
-        async with sem:
-            try:
-                results = await _score_batch(client, batch)
-            except Exception:
-                return
-        done["written"] += await asyncio.to_thread(_write, id_to_msgids, results)
+    async with AsyncOpenAI(base_url=BASE, api_key=KEY) as client:
+        async def worker(batch):
+            async with sem:
+                results = None
+                for attempt in range(2):   # 失敗重試一次（多半是限流或 JSON 被截斷）
+                    try:
+                        results = await _score_batch(client, batch)
+                        break
+                    except Exception as e:
+                        if attempt == 1:
+                            done["failed"] += 1
+                            done["first_error"] = done["first_error"] or repr(e)[:200]
+                if results is None:
+                    return   # 沒寫 sentiment_at → 下次 only_null 重跑會補
+            done["written"] += await asyncio.to_thread(_write, id_to_msgids, results)
 
-    await asyncio.gather(*(worker(b) for b in batches))
+        await asyncio.gather(*(worker(b) for b in batches))
+    if done["failed"]:
+        print(f"[SENTIMENT] {group_id[:12]}… 失敗 {done['failed']}/{len(batches)} 批（重跑會補）：{done['first_error']}")
     return {"group": group_id, "windows": len(windows), "written": done["written"]}
 
 

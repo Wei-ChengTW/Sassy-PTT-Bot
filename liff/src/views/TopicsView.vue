@@ -113,7 +113,7 @@
       <!-- 精選語錄 -->
       <template v-if="data.highlight_quotes && data.highlight_quotes.length">
         <div>
-          <SectionHeader title="情緒精選金句語錄" icon="💬" />
+          <SectionHeader title="精選金句語錄" icon="💬" subtitle="AI 評審每日選出" />
           <div class="space-y-3">
             <div
               v-for="(q, i) in data.highlight_quotes"
@@ -126,17 +126,19 @@
                   class="text-[10px] font-bold px-2 py-0.5 rounded-md"
                   :class="q.tone === 'positive' ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-700'"
                 >
-                  {{ q.tone === 'positive' ? '🔥 滿滿正能量' : '💢 吐槽代表' }}
+                  {{ q.label || (q.tone === 'positive' ? '🔥 滿滿正能量' : '💢 吐槽代表') }}
                 </span>
-                <span
-                  class="text-xs font-mono font-bold tabular-nums"
-                  :class="q.tone === 'positive' ? 'text-success-600' : 'text-danger-500'"
-                >
-                  {{ q.sentiment > 0 ? '+' : '' }}{{ q.sentiment.toFixed(2) }}
-                </span>
+                <span class="text-[11px] font-mono tabular-nums text-slate-400">{{ quoteDate(q.timestamp) }}</span>
               </div>
               <p class="text-sm font-semibold text-slate-800 leading-relaxed">「{{ q.content }}」</p>
-              <p class="text-xs text-slate-400 mt-1 font-medium text-right">— {{ q.user_name }}</p>
+              <div class="flex items-center justify-between mt-1 text-xs">
+                <span class="text-slate-400">
+                  <template v-if="q.laughs">😂 {{ q.laughs }} 人笑</template>
+                  <template v-if="q.laughs && q.replies"> · </template>
+                  <template v-if="q.replies">💬 {{ q.replies }} 則回覆</template>
+                </span>
+                <span class="text-slate-400 font-medium">— {{ q.user_name }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -154,7 +156,6 @@ import {
 } from 'chart.js'
 import { api } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
-import { useAnalysisStore } from '@/stores/analysis'
 import { useToast } from '@/composables/useToast'
 import { useRefreshOnAnalysis } from '@/composables/useRefreshOnAnalysis'
 import WordCloud from '@/components/WordCloud.vue'
@@ -166,7 +167,6 @@ ChartJS.register(CategoryScale, LinearScale, ArcElement, BarElement, PointElemen
 
 const auth = useAuthStore()
 const toast = useToast()
-const analysis = useAnalysisStore()
 const data = ref<any>(null)
 const loading = ref(true)
 const analyzing = ref(false)
@@ -184,13 +184,20 @@ function formatAnalyzedTime(ts: number) {
   return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+function quoteDate(ts: number) {
+  const d = new Date(ts)
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`
+}
+
 async function triggerReanalyze() {
   if (analyzing.value) return
   analyzing.value = true
   try {
     const res = await api.adminAnalyzeTopics()
-    analysis.bumped(res.updated)
-    toast.success(`LLM 分析完成，更新了 ${res.updated} 則訊息 🎉`)
+    const minutes = Math.max(1, Math.ceil(res.pending / 1000))
+    if (!res.started) toast.success(`已經在分析中了，約 ${minutes} 分鐘後重新整理看看 ⏳`)
+    else if (!res.pending) toast.success('最近一個月都分析過了，只補情緒分數 ✨')
+    else toast.success(`背景分析最近一個月 ${res.pending} 則訊息，約 ${minutes} 分鐘後重新整理 ⏳`)
   } catch (e: any) {
     toast.error(e?.message || '分析失敗，請稍後再試')
   } finally {

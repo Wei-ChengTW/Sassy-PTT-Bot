@@ -145,10 +145,14 @@ def _cp_sticker(conn, group_id, period):
 
 
 def _trip_kind_filter() -> str:
-    """單一真理來源：旅行 = end_date - start_date >= 86400；事件 = 其他。"""
+    """單一真理來源：旅行 = end_date - start_date >= 86400；事件 = 其他。
+
+    還沒開始的（start_date 在未來，例如規劃中的韓國滑雪）回 NULL → 不算進任何排行榜。
+    """
     return """(
         CASE
           WHEN start_date IS NULL THEN NULL
+          WHEN start_date > CAST(strftime('%s', 'now') AS INTEGER) THEN NULL
           WHEN end_date IS NOT NULL AND (end_date - start_date) >= 86400 THEN 'travel'
           ELSE 'event'
         END

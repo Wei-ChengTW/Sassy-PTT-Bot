@@ -177,6 +177,8 @@ async function submit() {
     if (mode.value === 'trip' && form.value.endDate) {
       endDate = Math.floor(new Date(form.value.endDate).getTime() / 1000)
     }
+    if (!startDate) { error.value = '請選擇開始日期'; return }
+    if (endDate !== undefined && endDate < startDate) { error.value = '結束日期不能早於開始日期'; return }
     const res = await api.adminCreateTrip({
       title: form.value.title.trim(),
       location: form.value.location.trim(),

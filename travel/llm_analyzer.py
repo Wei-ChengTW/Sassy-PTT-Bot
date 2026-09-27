@@ -13,7 +13,8 @@ from travel.db import get_conn
 
 PRIMARY_BASE = os.getenv("CLI_PROXY_BASE_URL", "http://localhost:8317/v1")
 PRIMARY_KEY = os.getenv("CLI_PROXY_API_KEY", "")
-PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gemini-3.6-flash-high")
+# 話題分析專用（與聊天的 PRIMARY_MODEL 分開）；3.8-flash-high 實測比 3.7 快約 20%、玩笑判讀一樣準
+PRIMARY_MODEL = os.getenv("ANALYZER_MODEL", "gemini-3.8-flash-high")
 FALLBACK_BASE = os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
 FALLBACK_KEY = os.getenv("CGU_LLM_API_KEY", "")
 FALLBACK_MODEL = os.getenv("CGU_LLM_MODEL", "gpt-5-mini")
@@ -106,42 +107,39 @@ async def analyze_batch(messages: list[dict]) -> list[dict]:
     raise RuntimeError(f"LLM 全部失敗: {last_err}")
 
 
-def run_monthly_analysis():
-    """主流程：撈未分析訊息 → 批次分析 → 回填 DB。"""
-    import asyncio
+RECENT_DAYS = 31  # 按鈕／每月排程：分析最近這麼多天內所有待分析訊息
 
+
+def fetch_pending_analysis(since_ms: int | None = None, limit: int | None = None,
+                           newest_first: bool = True) -> list[dict]:
+    """撈尚未分析（analyzed_at IS NULL）的文字訊息。"""
+    q = """SELECT id, user_name, content, timestamp
+           FROM messages
+           WHERE analyzed_at IS NULL AND content IS NOT NULL
+             AND type = 'text' AND length(content) > 1"""
+    params: list = []
+    if since_ms:
+        q += " AND timestamp > ?"
+        params.append(since_ms)
+    q += f" ORDER BY timestamp {'DESC' if newest_first else 'ASC'}"
+    if limit:
+        q += f" LIMIT {int(limit)}"
     with get_conn() as conn:
-        rows = conn.execute(
-            """SELECT id, user_name, content, timestamp
-               FROM messages
-               WHERE analyzed_at IS NULL
-                 AND content IS NOT NULL
-                 AND type = 'text'
-                 AND length(content) > 1
-               ORDER BY timestamp ASC
-               LIMIT ?""",
-            (BATCH_SIZE,),
-        ).fetchall()
+        return [dict(r) for r in conn.execute(q, params)]
 
-    if not rows:
-        print("[ANALYZER] 沒有未分析的訊息")
-        return 0
 
-    messages = [dict(r) for r in rows]
-    try:
-        results = asyncio.run(analyze_batch(messages))
-    except Exception as e:
-        print(f"[ANALYZER] LLM 失敗：{e}")
-        return 0
+def write_analysis_results(results: list[dict]) -> int:
+    """寫回話題／關鍵字／地點／摘要。
 
+    注意：sentiment 不在此寫入。逐則 flash 情緒判讀雜訊過高，情緒改由
+    travel.sentiment_windows 的視窗式 pro 模型分析負責（見 run_sentiment_backfill）。
+    """
     now = int(time.time())
     updated = 0
     with get_conn() as conn:
         for r in results:
             if "id" not in r:
                 continue
-            # 注意：sentiment 不在此寫入。逐則 flash 情緒判讀雜訊過高，情緒改由
-            # travel.sentiment_windows 的視窗式 pro 模型分析負責（見 run_sentiment_backfill）。
             conn.execute(
                 """UPDATE messages
                    SET is_travel_related=?, topics=?, keywords=?,
@@ -158,8 +156,53 @@ def run_monthly_analysis():
                 ),
             )
             updated += 1
-    print(f"[ANALYZER] 完成 {updated} 則分析（輸入 {len(messages)} 則）")
     return updated
+
+
+async def analyze_pending(since_ms: int | None = None, limit: int | None = None,
+                          concurrency: int = 8, newest_first: bool = True) -> int:
+    """把待分析訊息切成 BATCH_SIZE 一批、並發送 LLM，逐批寫回。可中斷續跑。回傳寫入則數。"""
+    import asyncio
+
+    pending = fetch_pending_analysis(since_ms, limit, newest_first)
+    if not pending:
+        print("[ANALYZER] 沒有未分析的訊息")
+        return 0
+    batches = [pending[i:i + BATCH_SIZE] for i in range(0, len(pending), BATCH_SIZE)]
+    print(f"[ANALYZER] 待分析 {len(pending)} 則 → {len(batches)} 批（並發 {concurrency}）")
+    sem = asyncio.Semaphore(concurrency)
+    done = {"msgs": 0, "batches": 0, "fail": 0}
+    t0 = time.time()
+
+    async def worker(batch):
+        async with sem:
+            try:
+                results = await analyze_batch(batch)
+            except Exception as e:
+                done["fail"] += 1
+                print(f"[ANALYZER] ⚠️ 批次失敗（{len(batch)} 則，下次重跑會補）：{e}")
+                return
+        done["msgs"] += await asyncio.to_thread(write_analysis_results, results)
+        done["batches"] += 1
+        if done["batches"] % 20 == 0 or done["batches"] == len(batches):
+            el = time.time() - t0
+            print(f"[ANALYZER] 進度 {done['batches']}/{len(batches)} 批 | {done['msgs']} 則 | "
+                  f"{el / 60:.1f} 分")
+
+    await asyncio.gather(*(worker(b) for b in batches))
+    print(f"[ANALYZER] 完成 {done['msgs']} 則，失敗批 {done['fail']}，耗時 {(time.time() - t0) / 60:.1f} 分")
+    return done["msgs"]
+
+
+def run_recent_analysis(days: int = RECENT_DAYS) -> int:
+    """按鈕與每月排程：分析最近 days 天內所有待分析訊息（由新到舊）。"""
+    import asyncio
+    since_ms = int((time.time() - days * 86400) * 1000)
+    return asyncio.run(analyze_pending(since_ms=since_ms))
+
+
+# 舊名稱：排程與既有呼叫點沿用
+run_monthly_analysis = run_recent_analysis
 
 
 async def _keyword_batch(messages: list[dict]) -> list[dict]:

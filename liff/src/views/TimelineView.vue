@@ -32,6 +32,12 @@
     </div>
 
     <EmptyState
+      v-else-if="error"
+      icon="⚠️"
+      title="載入失敗"
+      :description="error"
+    />
+    <EmptyState
       v-else-if="!trips.length"
       icon="🕰️"
       title="尚無回憶紀錄"
@@ -109,6 +115,7 @@ import EmptyState from '@/components/EmptyState.vue'
 const toast = useToast()
 const trips = ref<any[]>([])
 const loading = ref(true)
+const error = ref('')
 const sharingId = ref<string | null>(null)
 
 async function onQuickShare(id: string) {
@@ -173,7 +180,7 @@ function formatRange(t: any): string {
 
 onMounted(async () => {
   try { trips.value = await api.trips() }
-  catch (e) { console.error(e) }
+  catch (e: any) { error.value = e?.message || '請求失敗'; console.error(e) }
   finally { loading.value = false }
 })
 </script>

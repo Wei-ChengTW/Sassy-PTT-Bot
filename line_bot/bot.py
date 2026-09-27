@@ -94,7 +94,7 @@ _LINE_API_TIMEOUT = 5.0
 _LLM_SEM_TIMEOUT = 30.0
 # 聊天摘要：輸出較長、輸入可達數百則，放寬 token 與 timeout（仍需在 reply token 過期前回覆）
 _SUMMARY_MAX_TOKENS = 3000  # 含 thinking 約 1500，留餘裕
-_SUMMARY_TIMEOUT = 25.0
+_SUMMARY_TIMEOUT = 45.0  # 錯過數千則時輸入可達數十萬 token（實測 16000 則約 15 秒），留餘裕
 # 稱呼示範時抽到「自動稱號」的機率（其餘抽手寫暱稱），讓新稱號比一般暱稱常出現
 _AUTO_NICK_PICK_PROB = 0.6
 
@@ -105,7 +105,7 @@ from line_bot.chat_summary import (  # noqa: E402
     fetch_messages as fetch_summary_messages,
     format_transcript,
     is_summary_request,
-    select_round,
+    select_missed,
     summary_header,
     too_short_reply,
 )
@@ -159,6 +159,8 @@ SYSTEM_PROMPT = (
     "6. 只輸出角色的一句話回應，不加解釋、不加標籤、不加引導文字。\n"
     "7. 吐槽點要多樣化：不要每次都用同一招開酸（例如一直嗆失智、失憶、夜店、身分證）。\n"
     "   換不同角度切入，例如外號、經典事蹟、財力、感情狀態、身材、近況等，避免同樣的梗反覆出現。\n"
+    "8. 絕對不准編造具體的時間、日期、地點、金額或人數（例如「4點南港站」）！你這裡看不到完整紀錄，"
+    "有人問這類正事時不要回答內容，改酸他「要問正事前面加？啦」之類的話。\n"
     "風格參考：直接點評事情本質，用輕描淡寫的方式諷刺，像是在 PTT 留言串底下的神回覆。"
 )
 
@@ -249,9 +251,9 @@ def _resolve_context_for_short_message(user_text: str, history: list[dict]) -> s
 
 
 G8_REPLY = "對了！說到雞..."
+_G8_FIRST = {"ji", "ju"}  # 雞巴 / 居吧
 _G8_LATIN_RE = re.compile(r'(?<![A-Za-z0-9])(?:g8|jb)(?![A-Za-z0-9])', re.IGNORECASE)
 
-_G8_FIRST = {"ji", "ju"}  # 雞巴 / 居吧
 
 def is_g8(text: str) -> bool:
     """G8 偵查器：相鄰兩字讀音為 ji/ju + ba（不論聲調，中間夾空白/標點/符號也算），或出現 G8 / JB。"""
@@ -413,6 +415,16 @@ class SassyBrain:
                 hour=4,
                 minute=0,
                 id='weekly_auto_nickname',
+                misfire_grace_time=3600,
+                coalesce=True,
+            )
+            from travel.quotes import warm_highlight_quotes
+            self._scheduler.add_job(
+                warm_highlight_quotes,
+                trigger='cron',
+                hour=4,
+                minute=30,
+                id='daily_quotes_warm',
                 misfire_grace_time=3600,
                 coalesce=True,
             )
@@ -857,8 +869,11 @@ class SassyBrain:
                         self._spontaneous_lock.release()
                 threading.Thread(target=reply_spontaneous, daemon=True).start()
 
-    def _quoted_replier(self, event, chat_id: str, tag: str):
-        """回傳 reply(text)：引用發問訊息回覆並記入對話歷史。reply token 只能用一次，呼叫端只呼叫一次。"""
+    def _quoted_replier(self, event, chat_id: str, tag: str, push_fallback: bool = False):
+        """回傳 reply(text)：引用發問訊息回覆並記入對話歷史。reply token 只能用一次，呼叫端只呼叫一次。
+
+        push_fallback=True：回覆失敗（多半是 LLM 跑太久、reply token 過期）時改用推播（吃每月額度）。
+        """
         reply_token = event.reply_token
         quote_token = event.message.quote_token
 
@@ -873,18 +888,33 @@ class SassyBrain:
                 )
                 self._record_turn(chat_id, "鍵盤俠", text, "bot")
             except Exception as e:
-                logger.error(f"[{tag}] 回覆失敗: {e}")
+                if not push_fallback:
+                    logger.error(f"[{tag}] 回覆失敗: {e}")
+                    return
+                logger.warning(f"[{tag}] 回覆失敗，改用推播: {e}")
+                try:
+                    self.line_api.push_message(
+                        PushMessageRequest(
+                            to=chat_id,
+                            messages=[LineTextMessage(text=text, **({'quote_token': quote_token} if quote_token else {}))],
+                        ),
+                        _request_timeout=10.0,
+                    )
+                    self._record_turn(chat_id, "鍵盤俠", text, "bot")
+                except Exception as e2:
+                    logger.error(f"[{tag}] 推播也失敗: {e2}")
 
         return reply
 
     def _handle_summary_request(self, event, chat_id: str, asker: str) -> None:
-        """背景撈這一輪對話 → LLM 摘要 → 引用發問訊息回覆。"""
+        """背景撈發問者錯過的對話（上次講話之後）→ LLM 摘要 → 引用發問訊息回覆。"""
         before_ts = int(getattr(event, "timestamp", 0)) or int(time.time() * 1000)
-        reply = self._quoted_replier(event, chat_id, "SUMMARY")
+        user_id = getattr(event.source, "user_id", "") or ""
+        reply = self._quoted_replier(event, chat_id, "SUMMARY", push_fallback=True)
 
         def work():
             try:
-                msgs = select_round(fetch_summary_messages(chat_id, before_ts))
+                msgs, since_ts = select_missed(chat_id, user_id, before_ts)
             except Exception as e:
                 logger.error(f"[SUMMARY] 撈訊息失敗: {e}")
                 reply("資料庫掛了，自己往上滑吧 🙃")
@@ -896,16 +926,17 @@ class SassyBrain:
                 logger.warning("[SUMMARY] semaphore 逾時，跳過")
                 return
             try:
-                logger.info(f"[SUMMARY] 摘要 {len(msgs)} 則 (model={SUMMARY_MODEL})")
+                logger.info(f"[SUMMARY] 摘要 {len(msgs)} 則 since={since_ts} (model={SUMMARY_MODEL})")
+                multi_day = msgs[-1]["timestamp"] - msgs[0]["timestamp"] > 86400 * 1000
                 raw = asyncio.run(self._generate_with_fallback(
-                    build_summary_messages(format_transcript(msgs), asker),
+                    build_summary_messages(format_transcript(msgs, with_date=multi_day), asker, len(msgs)),
                     tag="SUMMARY", primary_model=SUMMARY_MODEL,
                     max_tokens=_SUMMARY_MAX_TOKENS, timeout=_SUMMARY_TIMEOUT,
                 ))
             finally:
                 self._llm_sem.release()
             if raw and raw.strip():
-                reply(f"{summary_header(msgs)}\n\n{raw.strip()}")
+                reply(f"{summary_header(msgs, since_ts)}\n\n{raw.strip()}")
             else:
                 reply("懶人包產生失敗，我也懶得看了，自己爬 🫠")
 

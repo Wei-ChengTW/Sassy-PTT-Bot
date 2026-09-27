@@ -377,3 +377,24 @@ def test_admin_members_skips_reconciled_manual_ids(client, db):
     ids = [m["user_id"] for m in r.get_json()]
     assert "manual:dead" not in ids
     assert "U_MEMBER" in ids
+
+
+def test_token_required_when_channel_configured(client, monkeypatch):
+    import line_bot.liff_api as api
+    monkeypatch.setenv("LIFF_CHANNEL_ID", "123")
+    monkeypatch.setattr(api, "_verify_liff_token", lambda t: "U_MEMBER" if t == "good" else None)
+    # 沒帶 token：就算冒充管理員標頭也 401
+    r = client.get("/liff/me", headers={"X-LIFF-UserId": "U_ADMIN"})
+    assert r.status_code == 401 and r.get_json()["reason"] == "token_invalid"
+    # token 無效
+    assert client.get("/liff/me", headers={"Authorization": "Bearer bad"}).status_code == 401
+    # token 有效：身分以 token 為準，忽略冒充的標頭
+    r = client.get("/liff/me", headers={"Authorization": "Bearer good", "X-LIFF-UserId": "U_ADMIN"})
+    assert r.status_code == 200
+    assert r.get_json()["user_id"] == "U_MEMBER" and r.get_json()["role"] == "member"
+
+
+def test_display_group_name_for_imported():
+    from line_bot.liff_api import _display_group_name
+    assert _display_group_name("imported:messenger:內中 Hub") == "📥 內中 Hub（Messenger 匯入）"
+    assert _display_group_name("imported:line") == "📥 line（匯入）"

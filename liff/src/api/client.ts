@@ -1,4 +1,7 @@
+import liff from '@line/liff'
+
 const API_BASE = '/liff'
+const RELOAD_KEY = 'liffTokenReloaded'
 
 export interface BoardRow {
   user_id: string
@@ -80,6 +83,19 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const query = qs.toString()
   const fullPath = query ? `${base}?${query}` : base
   const res = await fetch(`${API_BASE}${fullPath}`, { ...opts, headers })
+  if (res.status === 401) {
+    // LINE ID token 失效（約 1 小時）：先重新整理拿新 token；還不行就重新登入（各只試一次，避免無限重整）
+    if (!sessionStorage.getItem(RELOAD_KEY)) {
+      sessionStorage.setItem(RELOAD_KEY, '1')
+      location.reload()
+    } else {
+      sessionStorage.removeItem(RELOAD_KEY)
+      liff.logout()
+      liff.login()
+    }
+    throw new Error('登入已過期，重新登入中…')
+  }
+  sessionStorage.removeItem(RELOAD_KEY)
   if (!res.ok) {
     let reason = ''
     try { const j = await res.json(); reason = j.reason || j.error || '' } catch {}
@@ -111,7 +127,7 @@ export const api = {
   pulse: () => req<any>('/pulse'),
   nicknames: () => req<NicknamesData>('/nicknames'),
   compare: (a: string, b: string) => req<any>(`/compare?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`),
-  adminAnalyzeTopics: () => req<{ updated: number; success: boolean }>('/admin/analyze-topics', { method: 'POST' }),
+  adminAnalyzeTopics: () => req<{ started: boolean; running: boolean; pending: number }>('/admin/analyze-topics', { method: 'POST' }),
   adminGroups: () => req<any[]>('/admin/groups'),
   adminMembers: () => req<{ user_id: string; display_name: string; source: string; resolved: number }[]>('/admin/members'),
   periods: () => req<{ years: string[]; months: string[] }>('/periods'),

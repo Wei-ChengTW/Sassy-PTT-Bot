@@ -41,8 +41,8 @@
           <div class="flex items-center gap-2 text-xs mt-3 pt-3 border-t border-slate-100">
             <span class="font-medium text-slate-600">
               狀態：
-              <span :class="detail.trip.status === 'ended' ? 'text-slate-400' : 'text-brand-600 font-bold'">
-                {{ detail.trip.status === 'ended' ? '已結束' : '進行中 🔥' }}
+              <span :class="{ ended: 'text-slate-400', upcoming: 'text-amber-600 font-bold', ongoing: 'text-brand-600 font-bold' }[tripPhase(detail.trip)]">
+                {{ { ended: '已結束', upcoming: '規劃中 🗓️', ongoing: '進行中 🔥' }[tripPhase(detail.trip)] }}
               </span>
             </span>
             <span
@@ -256,6 +256,7 @@ import { rarityOf } from '@/constants/rarity'
 import { TRIP_TYPES, emojiFor, labelFor } from '@/constants/tripTypes'
 import BaseCard from '@/components/BaseCard.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
+import { tripPhase } from '@/constants/tripStatus'
 
 const route = useRoute()
 const tripId = route.params.id as string

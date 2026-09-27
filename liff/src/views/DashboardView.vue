@@ -190,13 +190,13 @@
               v-for="(u, i) in data.top_users.slice(0, 5)"
               :key="u.user_id"
               class="flex items-center px-4 py-3.5 gap-3 transition-colors hover:bg-slate-50/80"
-              :class="i === 0 ? 'bg-accent-50/40' : ''"
+              :class="topRanks[i] === 1 ? 'bg-accent-50/40' : ''"
             >
               <span
                 class="text-sm w-6 text-center font-bold tabular-nums"
-                :class="i === 0 ? 'text-accent-600' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 font-normal'"
+                :class="topRanks[i] === 1 ? 'text-accent-600' : topRanks[i] === 2 ? 'text-slate-400' : topRanks[i] === 3 ? 'text-amber-700' : 'text-slate-300 font-normal'"
               >
-                {{ i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1 }}
+                {{ medal(topRanks[i]) }}
               </span>
               <span class="flex-1 text-sm font-semibold text-slate-800 truncate">
                 {{ u.user_name || u.user_id }}
@@ -241,6 +241,7 @@ import {
   BarElement, PointElement, LineElement, Tooltip, Legend, Filler,
 } from 'chart.js'
 import { api } from '@/api/client'
+import { competitionRanks, medal } from '@/utils/rank'
 import { useRefreshOnAnalysis } from '@/composables/useRefreshOnAnalysis'
 import { emojiFor, labelFor } from '@/constants/tripTypes'
 import { TYPE_COLORS } from '@/constants/chartColors'
@@ -253,6 +254,8 @@ import SectionHeader from '@/components/SectionHeader.vue'
 ChartJS.register(CategoryScale, LinearScale, RadialLinearScale, BarElement, PointElement, LineElement, Tooltip, Legend, Filler)
 
 const data = ref<any>(null)
+// 同分同名次
+const topRanks = computed(() => competitionRanks((data.value?.top_users || []).slice(0, 5), (u: any) => u.total))
 const loading = ref(true)
 const error = ref('')
 

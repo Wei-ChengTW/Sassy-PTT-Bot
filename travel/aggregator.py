@@ -49,8 +49,10 @@ def aggregate_lifetime() -> int:
                       COUNT(*) AS total,
                       MIN(m.timestamp) AS first_seen,
                       MAX(m.timestamp) AS last_seen,
-                      (SELECT COUNT(DISTINCT trip_id) FROM trip_participants tp
-                       WHERE tp.user_id = m.user_id) AS total_trips
+                      (SELECT COUNT(DISTINCT tp.trip_id) FROM trip_participants tp
+                       JOIN trips t ON t.id = tp.trip_id
+                       WHERE tp.user_id = m.user_id
+                         AND t.start_date <= CAST(strftime('%s', 'now') AS INTEGER)) AS total_trips
                FROM messages m
                WHERE m.user_id NOT LIKE 'imported:%'
                GROUP BY m.user_id, m.group_id"""

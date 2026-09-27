@@ -48,17 +48,17 @@
               v-for="(u, i) in sortedBadgeRankings"
               :key="u.user_id"
               class="flex items-center px-4 py-3.5 gap-3 transition-colors hover:bg-slate-50/80"
-              :class="i === 0 ? 'bg-accent-50/40' : i === 1 ? 'bg-slate-50/60' : ''"
+              :class="badgeRanks[i] === 1 ? 'bg-accent-50/40' : badgeRanks[i] === 2 ? 'bg-slate-50/60' : ''"
             >
               <!-- Medal / Rank -->
               <span
                 class="text-sm w-6 text-center font-bold tabular-nums shrink-0"
-                :class="i === 0 ? 'text-accent-600' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 font-normal'"
+                :class="badgeRanks[i] === 1 ? 'text-accent-600' : badgeRanks[i] === 2 ? 'text-slate-400' : badgeRanks[i] === 3 ? 'text-amber-700' : 'text-slate-300 font-normal'"
               >
-                {{ i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1 }}
+                {{ medal(badgeRanks[i]) }}
               </span>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold truncate" :class="i === 0 ? 'text-amber-950' : 'text-slate-800'">
+                <p class="text-sm font-bold truncate" :class="badgeRanks[i] === 1 ? 'text-amber-950' : 'text-slate-800'">
                   {{ u.user_name || u.user_id }}
                 </p>
                 <!-- 稀有度分佈 pills -->
@@ -84,7 +84,7 @@
                 <template v-if="badgeSortMode === 'weighted'">
                   <span
                     class="text-base font-black font-mono tabular-nums"
-                    :class="i === 0 ? 'text-accent-600' : 'text-brand-600'"
+                    :class="badgeRanks[i] === 1 ? 'text-accent-600' : 'text-brand-600'"
                   >
                     {{ u.score }}
                   </span>
@@ -93,7 +93,7 @@
                 <template v-else>
                   <span
                     class="text-base font-black font-mono tabular-nums"
-                    :class="i === 0 ? 'text-accent-600' : 'text-slate-800'"
+                    :class="badgeRanks[i] === 1 ? 'text-accent-600' : 'text-slate-800'"
                   >
                     {{ u.badge_count }}
                   </span>
@@ -129,17 +129,17 @@
               v-for="(u, i) in sortedMessageRankings"
               :key="u.user_id"
               class="flex items-center px-4 py-3.5 gap-3 transition-colors hover:bg-slate-50/80"
-              :class="i === 0 ? 'bg-accent-50/40' : i === 1 ? 'bg-slate-50/60' : ''"
+              :class="msgRanks[i] === 1 ? 'bg-accent-50/40' : msgRanks[i] === 2 ? 'bg-slate-50/60' : ''"
             >
               <!-- Medal / Rank -->
               <span
                 class="text-sm w-6 text-center font-bold tabular-nums shrink-0"
-                :class="i === 0 ? 'text-accent-600' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 font-normal'"
+                :class="msgRanks[i] === 1 ? 'text-accent-600' : msgRanks[i] === 2 ? 'text-slate-400' : msgRanks[i] === 3 ? 'text-amber-700' : 'text-slate-300 font-normal'"
               >
-                {{ i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1 }}
+                {{ medal(msgRanks[i]) }}
               </span>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold truncate" :class="i === 0 ? 'text-amber-950' : 'text-slate-800'">
+                <p class="text-sm font-bold truncate" :class="msgRanks[i] === 1 ? 'text-amber-950' : 'text-slate-800'">
                   {{ u.user_name || u.user_id }}
                 </p>
                 <!-- 訊息類型分佈 pills -->
@@ -161,7 +161,7 @@
               <div class="text-right shrink-0">
                 <span
                   class="text-base font-black font-mono tabular-nums"
-                  :class="i === 0 ? 'text-accent-600' : 'text-slate-800'"
+                  :class="msgRanks[i] === 1 ? 'text-accent-600' : 'text-slate-800'"
                 >
                   {{ (displayCountOf(u)).toLocaleString() }}
                 </span>
@@ -193,7 +193,7 @@
               :key="u.user_id"
               class="flex items-center px-4 py-3.5 gap-3"
             >
-              <span class="text-slate-300 text-sm w-5 tabular-nums font-medium">{{ i + 1 }}</span>
+              <span class="text-slate-300 text-sm w-5 tabular-nums font-medium">{{ nightRanks[i] }}</span>
               <span class="flex-1 text-sm font-semibold text-slate-800 truncate">{{ u.user_name || u.user_id }}</span>
               <span class="text-sm font-bold font-mono tabular-nums text-purple-600">
                 {{ u.night_count }}
@@ -231,6 +231,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { competitionRanks, medal } from '@/utils/rank'
 import { Pie } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { api, type Board } from '@/api/client'
@@ -282,6 +283,12 @@ const filterUnitText = computed(() => {
   if (activeMessageFilter.value === 'image') return '圖片'
   return ''
 })
+
+// 同分同名次（與排序用的欄位一致）
+const badgeRanks = computed(() => competitionRanks(sortedBadgeRankings.value,
+  (u: any) => `${u.score ?? 0}|${u.legendary_count ?? 0}|${u.badge_count ?? 0}`))
+const msgRanks = computed(() => competitionRanks(sortedMessageRankings.value, displayCountOf))
+const nightRanks = computed(() => competitionRanks(data.value?.night_owls || [], (u: any) => u.night_count))
 
 const sortedMessageRankings = computed(() => {
   const list = [...(data.value?.rankings || [])]

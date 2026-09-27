@@ -130,3 +130,12 @@ def test_weekly_trend_structure(db):
     assert "weeks" in wt
     assert wt["this_week"] >= 0
     assert isinstance(wt["weeks"], list)
+
+
+def test_active_trips_excludes_future_and_ended(db):
+    from travel.stats import get_dashboard_data
+    now = int(time.time())
+    create_trip("C1", "進行中", "x", now - 86400, None, "U1")
+    create_trip("C1", "規劃中", "x", now + 86400 * 30, None, "U1")
+    end_trip(create_trip("C1", "已結束", "x", now - 86400 * 10, None, "U1"))
+    assert get_dashboard_data("C1")["summary"]["active_trips"] == 1

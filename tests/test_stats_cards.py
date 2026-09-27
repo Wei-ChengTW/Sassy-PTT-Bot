@@ -107,3 +107,9 @@ def test_personal_card_includes_name_and_best_friend():
 def test_quick_reply_has_five_items():
     qr = cards.stats_quick_reply(LIFF)
     assert len(qr.items) == 5
+
+
+def test_competition_ranks_ties_share_rank():
+    from line_bot.stats_cards import competition_ranks
+    assert competition_ranks([9, 9, 8, 8, 8, 5]) == [1, 1, 2, 2, 2, 3]
+    assert competition_ranks([]) == []

@@ -4,7 +4,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, g, request, jsonify
 
 from travel.stats import get_dashboard_data, get_trips_list, get_trip_detail, get_user_badges
 from travel.trip_crud import create_trip, add_participants, end_trip, set_participants
@@ -18,6 +18,10 @@ from travel.leaderboards import get_all_boards
 from travel.cache import cached
 
 liff_bp = Blueprint("liff", __name__, url_prefix="/liff")
+
+# 「重新分析」背景工作鎖：同時間只跑一個
+import threading as _threading
+_analysis_lock = _threading.Lock()
 
 # token → (user_id, expiry_epoch)
 _token_cache: dict[str, tuple[str, float]] = {}
@@ -90,21 +94,30 @@ def _verify_liff_token(token: str) -> str | None:
     return None
 
 
-def _get_liff_user_id() -> str:
-    """Extract verified user_id from Authorization header or fall back to X-LIFF-UserId.
+@liff_bp.before_request
+def _require_liff_token():
+    """設定 LIFF_CHANNEL_ID 時，每個請求都必須帶有效的 LINE ID token（Authorization: Bearer）。
 
-    When LIFF_CHANNEL_ID is set, the Authorization: Bearer <id_token> header is
-    required and verified. Without the env var (local dev), the plain header is accepted.
+    驗證成功的 user_id 存在 g.liff_user_id，之後一律用它，不信任 X-LIFF-UserId 標頭
+    （否則拿到網址、知道管理員 LINE ID 的人就能冒充管理員）。
+    token 缺少或過期（LINE 的 ID token 約 1 小時失效）→ 401，前端會重新整理換新 token。
+    未設定 LIFF_CHANNEL_ID（本機開發、測試）則沿用 X-LIFF-UserId。
     """
+    g.liff_user_id = None
+    if not os.getenv("LIFF_CHANNEL_ID"):
+        return None
     auth = request.headers.get("Authorization", "")
-    if auth.startswith("Bearer "):
-        token = auth[7:]
-        verified = _verify_liff_token(token)
-        if verified:
-            return verified
-        # Token present but verification failed → reject (empty string → 403 downstream)
-        if os.getenv("LIFF_CHANNEL_ID"):
-            return ""
+    user_id = _verify_liff_token(auth[7:]) if auth.startswith("Bearer ") else None
+    if not user_id:
+        return jsonify({"error": "unauthorized", "reason": "token_invalid"}), 401
+    g.liff_user_id = user_id
+    return None
+
+
+def _get_liff_user_id() -> str:
+    """目前請求的 LINE user_id：有驗證過的 token 就用它，否則（未設定驗證）用 X-LIFF-UserId。"""
+    if getattr(g, "liff_user_id", None):
+        return g.liff_user_id
     return request.headers.get("X-LIFF-UserId", "")
 
 
@@ -264,16 +277,19 @@ def admin_create_trip():
         except (ValueError, TypeError):
             end_date = None
 
-    trip_id = create_trip(
-        group_id=group_id,
-        title=body.get("title", ""),
-        location=body.get("location", ""),
-        start_date=start_date,
-        end_date=end_date,
-        trip_types=body.get("types", body.get("type")),
-        custom_emoji=body.get("custom_emoji"),
-        created_by=user_id,
-    )
+    try:
+        trip_id = create_trip(
+            group_id=group_id,
+            title=body.get("title", ""),
+            location=body.get("location", ""),
+            start_date=start_date,
+            end_date=end_date,
+            trip_types=body.get("types", body.get("type")),
+            custom_emoji=body.get("custom_emoji"),
+            created_by=user_id,
+        )
+    except ValueError as e:
+        return jsonify({"error": str(e), "reason": str(e)}), 400
     return jsonify({"trip_id": trip_id, "status": "planning"})
 
 
@@ -312,7 +328,7 @@ def admin_update_trip(trip_id):
         )
         return jsonify(result)
     except ValueError as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e), "reason": str(e)}), 400
 
 
 @liff_bp.route("/admin/trips/<trip_id>/title", methods=["POST"])
@@ -365,9 +381,25 @@ def admin_analyze_topics():
     user_id = _get_liff_user_id()
     if not _is_admin(user_id):
         return _forbid("not_admin")
-    from travel.llm_analyzer import run_monthly_analysis
-    updated = run_monthly_analysis()
-    return jsonify({"updated": updated, "success": True})
+    import threading
+    from travel.llm_analyzer import RECENT_DAYS, fetch_pending_analysis, run_recent_analysis
+    from travel.sentiment_windows import run_sentiment_backfill
+    since_ms = int((time.time() - RECENT_DAYS * 86400) * 1000)
+    pending = len(fetch_pending_analysis(since_ms=since_ms))
+    # 數千則要跑好幾分鐘，HTTP 等不了 → 背景執行；同時間只跑一個
+    if not _analysis_lock.acquire(blocking=False):
+        return jsonify({"started": False, "running": True, "pending": pending})
+    group_id = _resolve_group_id(user_id, _get_liff_group_id())
+
+    def run():
+        try:
+            run_recent_analysis()
+            run_sentiment_backfill(group_id or None)   # only_null：只補還沒評的情緒視窗
+        finally:
+            _analysis_lock.release()
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"started": True, "running": True, "pending": pending})
 
 
 @liff_bp.route("/admin/groups")
@@ -377,12 +409,23 @@ def admin_groups():
         return _forbid("not_admin")
     from travel.db import get_conn
     with get_conn() as conn:
+        # dm 是私訊，不是群組
         rows = conn.execute(
-            "SELECT group_id, COUNT(*) AS msg_count FROM messages GROUP BY group_id ORDER BY msg_count DESC"
+            """SELECT group_id, COUNT(*) AS msg_count FROM messages
+               WHERE group_id != 'dm' GROUP BY group_id ORDER BY msg_count DESC"""
         ).fetchall()
     groups = [{"group_id": r["group_id"], "msg_count": r["msg_count"],
-               "name": _get_group_name(r["group_id"])} for r in rows]
+               "name": _display_group_name(r["group_id"])} for r in rows]
     return jsonify(groups)
+
+
+def _display_group_name(group_id: str) -> str:
+    """匯入的舊群組（imported:messenger:內中 Hub）顯示成「📥 內中 Hub（Messenger 匯入）」。"""
+    if group_id.startswith("imported:"):
+        _, source, *rest = group_id.split(":", 2)
+        name = rest[0] if rest else source
+        return f"📥 {name}（{source.capitalize()} 匯入）" if rest else f"📥 {name}（匯入）"
+    return _get_group_name(group_id)
 
 
 @liff_bp.route("/admin/members")

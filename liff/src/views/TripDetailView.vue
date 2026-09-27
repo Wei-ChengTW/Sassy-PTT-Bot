@@ -12,7 +12,13 @@
       <div class="skeleton h-24 rounded-2xl" />
     </div>
 
-    <div v-else-if="detail" class="space-y-6">
+    <EmptyState
+      v-else-if="!detail"
+      icon="🔍"
+      title="找不到這趟旅程"
+      :description="error || '可能已被刪除，或網址打錯了'"
+    />
+    <div v-else class="space-y-6">
       <!-- Hero Card -->
       <div
         class="rounded-2xl border p-5 shadow-card relative overflow-hidden card-rise"
@@ -55,7 +61,7 @@
 
         <div class="mt-4 pt-3 border-t border-black/5 flex items-center justify-between text-xs font-semibold" :class="rarity.name">
           <span class="opacity-80">
-            狀態：{{ detail.trip.status === 'ended' ? '已圓滿結束' : '進行中 🔥' }}
+            狀態：{{ { ended: '已圓滿結束', upcoming: '規劃中 🗓️', ongoing: '進行中 🔥' }[tripPhase(detail.trip)] }}
           </span>
           <span class="font-mono opacity-90">
             💬 {{ detail.stats.message_count }} 則訊息
@@ -120,12 +126,15 @@ import { shareFlexMessage } from '@/utils/liffShare'
 import { useToast } from '@/composables/useToast'
 import BaseCard from '@/components/BaseCard.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
+import EmptyState from '@/components/EmptyState.vue'
+import { tripPhase } from '@/constants/tripStatus'
 
 const route = useRoute()
 const auth = useAuthStore()
 const toast = useToast()
 const detail = ref<any>(null)
 const loading = ref(true)
+const error = ref('')
 const sharing = ref(false)
 
 async function onShare() {
@@ -158,7 +167,11 @@ const dateRange = computed(() => {
 
 onMounted(async () => {
   try { detail.value = await api.tripDetail(route.params.id as string) }
-  catch (e) { console.error(e) }
+  catch (e: any) {
+    // 404 屬於正常的「找不到」，其他錯誤才顯示訊息
+    if (!String(e?.message).startsWith('404')) error.value = e?.message || '請求失敗'
+    console.error(e)
+  }
   finally { loading.value = false }
 })
 </script>

@@ -1,11 +1,6 @@
-"""測試 travel/stats_extended.py 精選語錄選取純函式（內容過濾／時間去重／正負平衡）。"""
+"""精選語錄：內容過濾（stats_extended）＋ 規則分數／候選池／LLM 解析（travel/quotes.py）。"""
 import pytest
-from travel.stats_extended import (
-    _QUOTE_WINDOW_MS,
-    _is_quote_worthy,
-    _dedup_quote_rows,
-    _balance_quotes,
-)
+from travel.stats_extended import _is_quote_worthy
 
 
 def _row(content, sentiment, timestamp, user_name="A"):
@@ -47,87 +42,58 @@ def test_worthy_accepts_real_sentence():
     assert _is_quote_worthy("居然連這種地方都能吃到超好吃的小籠包")
 
 
-# ─── 時間視窗去重 ───────────────────────────────────────────────────────────
+# ─── 規則分數與候選池（travel/quotes.py）────────────────────────────────────
 
-def test_dedup_same_window_keeps_longest():
-    base = 1735693200000
-    rows = [
-        _row("短句", 0.9, base),
-        _row("這個太扯了吧", 0.9, base + 1000),
-        _row("真的假的", 0.9, base + 2000),
-        _row("一個完整到不行的完整句子內容", 0.9, base + 3000),
+from travel.quotes import (  # noqa: E402
+    build_pool, count_laughs_after, parse_curation, pick_rule_based, quote_score,
+)
+
+
+def _cand(id, user, score, ts, sentiment=0.5, content=None):
+    return {"id": id, "user_name": user, "score": score, "timestamp": ts,
+            "sentiment": sentiment, "content": content or f"第{id}句"}
+
+
+def test_quote_score_rewards_reactions_with_cap():
+    assert quote_score(-0.5, 0, 0) == 0.5
+    assert quote_score(0.5, 1, 2) > quote_score(0.9, 0, 0)       # 有人笑比情緒強更重要
+    assert quote_score(0.5, 10, 10) == quote_score(0.5, 3, 3)    # 反應最多算 3 次
+
+
+def test_count_laughs_after_only_others_within_window():
+    stream = [
+        {"user_id": "A", "content": "我連車都停不進去", "timestamp": 0},
+        {"user_id": "A", "content": "哈哈哈", "timestamp": 1000},        # 自己笑不算
+        {"user_id": "B", "content": "笑死", "timestamp": 2000},
+        {"user_id": "C", "content": "XD", "timestamp": 60_000},
+        {"user_id": "D", "content": "好", "timestamp": 70_000},          # 不是笑
+        {"user_id": "E", "content": "笑死", "timestamp": 200_000},       # 超過 2 分鐘
     ]
-    out = _dedup_quote_rows(rows)
-    assert len(out) == 1
-    assert out[0]["content"] == "一個完整到不行的完整句子內容"
+    ts = [m["timestamp"] for m in stream]
+    assert count_laughs_after(stream[0], stream, ts) == 2
 
 
-def test_dedup_keeps_separate_windows():
-    base = 1735693200000
-    rows = [
-        _row("第一段對話的最長句子", 0.9, base),
-        _row("第二段對話的句子", 0.9, base + _QUOTE_WINDOW_MS + 1000),
+def test_build_pool_one_per_moment_and_per_person_cap():
+    cands = [
+        _cand(1, "A", 1.0, 0), _cand(2, "B", 2.0, 1000),           # 同一時段 → 留高分的 2
+        _cand(3, "A", 1.5, 10**7), _cand(4, "A", 1.4, 2 * 10**7), _cand(5, "A", 1.3, 3 * 10**7),
     ]
-    out = _dedup_quote_rows(rows)
-    assert len(out) == 2
+    pool = build_pool(cands, size=10, per_person=2)
+    assert [c["id"] for c in pool] == [2, 3, 4]
 
 
-def test_dedup_picks_longest_in_each_cluster():
-    base = 1735693200000
-    rows = [
-        # 視窗 A：三則，最長是「A 完整句子內容比較長」
-        _row("A 短", 0.8, base),
-        _row("A 完整句子內容比較長", 0.8, base + 1000),
-        _row("A 中", 0.8, base + 2000),
-        # 視窗 B（與視窗 A 最後一則間隔 >10 分鐘）
-        _row("B 完整句子內容比較長長", 0.8, base + _QUOTE_WINDOW_MS + 3000),
-        _row("B 短", 0.8, base + _QUOTE_WINDOW_MS + 4000),
-    ]
-    out = _dedup_quote_rows(rows)
-    assert [r["content"] for r in out] == ["A 完整句子內容比較長", "B 完整句子內容比較長長"]
+def test_pick_rule_based_balances_and_caps_person():
+    pool = ([_cand(i, "A", 2 - i * 0.1, i, sentiment=0.8) for i in range(4)]
+            + [_cand(10 + i, f"N{i}", 1 - i * 0.1, 100 + i, sentiment=-0.8) for i in range(3)])
+    picked = pick_rule_based(pool, limit=4, per_person=2)
+    assert [c["id"] for c in picked] == [0, 1, 10, 11]
 
 
-# ─── 正負平衡 ───────────────────────────────────────────────────────────────
-
-def test_balance_even_pos_neg():
-    base = 1735693200000
-    rows = (
-        [_row(f"正{i}", 0.9 - i * 0.1, base + i * 1000) for i in range(5)]
-        + [_row(f"負{i}", -0.9 + i * 0.1, base + (10 + i) * 1000) for i in range(5)]
-    )
-    out = _balance_quotes(rows, 10)
-    pos = [r for r in out if r["sentiment"] >= 0]
-    neg = [r for r in out if r["sentiment"] < 0]
-    assert len(out) == 10
-    assert len(pos) == 5
-    assert len(neg) == 5
-
-
-def test_balance_fills_short_side_from_long_side():
-    base = 1735693200000
-    rows = (
-        [_row(f"正{i}", 0.9 - i * 0.05, base + i * 1000) for i in range(8)]
-        + [_row("負0", -0.8, base + 9000 * 1000)]
-    )
-    out = _balance_quotes(rows, 10)
-    assert len(out) == 9
-    assert sum(1 for r in out if r["sentiment"] < 0) == 1
-    assert sum(1 for r in out if r["sentiment"] >= 0) == 8
-
-
-def test_balance_fewer_rows_than_limit():
-    rows = [_row("只有一則", 0.7, 1735693200000)]
-    out = _balance_quotes(rows, 10)
-    assert len(out) == 1
-
-
-def test_balance_orders_by_abs_sentiment():
-    base = 1735693200000
-    rows = [
-        _row("弱正", 0.3, base + 1000),
-        _row("強負", -0.95, base),
-        _row("強正", 0.9, base + 2000),
-    ]
-    out = _balance_quotes(rows, 2)
-    # 各側取極端者：強正 (0.9) 與 強負 (-0.95)
-    assert {r["content"] for r in out} == {"強正", "強負"}
+def test_parse_curation_filters_unknown_ids_and_caps_person():
+    pool = [_cand(1, "A", 1, 0), _cand(2, "A", 1, 1), _cand(3, "A", 1, 2), _cand(4, "B", 1, 3)]
+    raw = '```json\n[{"id": 1, "label": "💀 社死現場"}, {"id": 99, "label": "x"}, {"id": "2"},' \
+          ' {"id": 3, "label": "y"}, {"id": 4, "label": "🤡 自爆代表"}]\n```'
+    out = parse_curation(raw, pool)
+    assert [c["id"] for c in out] == [1, 2, 4]
+    assert out[0]["label"] == "💀 社死現場" and out[1]["label"] is None
+    assert parse_curation("不是 JSON", pool) == []

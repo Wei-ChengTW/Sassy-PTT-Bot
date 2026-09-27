@@ -133,3 +133,17 @@ def test_set_participants_syncs_selection(db):
             "SELECT user_id FROM trip_participants WHERE trip_id=?", (trip_id,))}
     assert uids == {"U2", "U3"}
     assert get_trip(trip_id)["status"] != "ended"   # 只存名單，不結束
+
+
+def test_trip_dates_validated(db):
+    from travel.trip_crud import create_trip, update_trip
+    with pytest.raises(ValueError):
+        create_trip("C1", "沒日期", "x", 0, None, "U1")
+    with pytest.raises(ValueError):
+        create_trip("C1", "倒著走", "x", 1700000000, None, "U1", end_date=1699999999)
+    tid = create_trip("C1", "正常", "x", 1700000000, None, "U1", end_date=1700086400)
+    with pytest.raises(ValueError):
+        update_trip(tid, end_date=1600000000)          # 結束日改到開始日之前
+    with pytest.raises(ValueError):
+        update_trip(tid, start_date=1800000000)        # 開始日改到結束日之後
+    update_trip(tid, start_date=1699000000)           # 合法

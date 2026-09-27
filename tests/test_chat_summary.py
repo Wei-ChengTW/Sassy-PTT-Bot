@@ -1,4 +1,5 @@
 """聊天摘要：觸發詞判斷與「這一輪」切段。"""
+import pytest
 from line_bot.chat_summary import (
     ROUND_GAP_MS, format_transcript, is_summary_request, select_round, too_short_reply,
 )
@@ -50,6 +51,10 @@ def test_too_short_reply_mentions_count():
     assert "7" in too_short_reply(7)
 
 
+def test_too_short_reply_zero_is_about_being_last_speaker():
+    assert all("0 則" not in too_short_reply(0) for _ in range(20))
+
+
 def test_empty():
     assert select_round([]) == []
 
@@ -62,3 +67,53 @@ def test_format_transcript_marks_non_text():
     lines = format_transcript(msgs).splitlines()
     assert lines[0].endswith("A: 嗨")
     assert lines[1].endswith("B: [貼圖]")
+
+
+def test_bullet_range_scales_with_volume():
+    from line_bot.chat_summary import bullet_range
+    assert bullet_range(50) == "3～6 點"
+    assert bullet_range(500) == "5～10 點"
+    assert bullet_range(5000).startswith("8～15 點")
+
+
+def test_summary_header_since_last_spoke():
+    from line_bot.chat_summary import summary_header
+    msgs = [{"timestamp": 0}, {"timestamp": MIN}]
+    assert summary_header(msgs, since_ts=0).startswith("📋 從你上次講話（")
+    assert "共 2 則" in summary_header(msgs, since_ts=0)
+
+
+@pytest.fixture
+def db(monkeypatch, tmp_path):
+    from travel.db import init_db
+    from travel.migrations import migrate
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+    init_db()
+    migrate()
+
+
+def _insert(uid, name, ts, text="x"):
+    from travel.db import insert_message
+    insert_message({
+        "line_message_id": f"{uid}-{ts}", "group_id": "C1", "user_id": uid, "user_name": name,
+        "type": "text", "content": text, "metadata": {}, "reply_to_message_id": None, "timestamp": ts,
+    })
+
+
+def test_select_missed_starts_after_askers_last_message(db):
+    from line_bot.chat_summary import select_missed
+    _insert("U_ASK", "問的人", 1000, "我先去忙")
+    for i in range(12):
+        _insert("U_OTHER", "別人", 2000 + i, f"聊{i}")
+    msgs, since = select_missed("C1", "U_ASK", 10_000)
+    assert since == 1000
+    assert [m["content"] for m in msgs] == [f"聊{i}" for i in range(12)]
+
+
+def test_select_missed_never_spoke_falls_back_to_round(db):
+    from line_bot.chat_summary import select_missed
+    _insert("U_OTHER", "別人", 1000, "舊")
+    _insert("U_OTHER", "別人", 1000 + ROUND_GAP_MS + 1, "新")
+    msgs, since = select_missed("C1", "U_NEW", 10**12)
+    assert since is None
+    assert [m["content"] for m in msgs] == ["新"]

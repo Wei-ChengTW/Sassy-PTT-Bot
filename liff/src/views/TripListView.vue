@@ -21,6 +21,12 @@
     </div>
 
     <EmptyState
+      v-else-if="error"
+      icon="⚠️"
+      title="載入失敗"
+      :description="error"
+    />
+    <EmptyState
       v-else-if="trips.length === 0"
       icon="🧳"
       title="尚無旅行紀錄"
@@ -89,9 +95,9 @@
             </div>
             <span
               class="text-[11px] px-2.5 py-1 rounded-full shrink-0 font-bold"
-              :class="t.status === 'ended' ? 'bg-slate-200/80 text-slate-600' : 'bg-brand-600 text-white shadow-sm'"
+              :class="phaseClass(t)"
             >
-              {{ t.status === 'ended' ? '已結束' : '進行中' }}
+              {{ PHASE_LABEL[tripPhase(t)] }}
             </span>
           </div>
         </router-link>
@@ -108,12 +114,14 @@ import { rarityOf } from '@/constants/rarity'
 import ChipFilter from '@/components/ChipFilter.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { useAuthStore } from '@/stores/auth'
+import { tripPhase, PHASE_LABEL } from '@/constants/tripStatus'
 
 const auth = useAuthStore()
 // 建立旅行頁與 API 皆限管理員（router: /admin/trips/new）
 const isAdmin = computed(() => auth.role === 'admin')
 const trips = ref<any[]>([])
 const loading = ref(true)
+const error = ref('')
 const activeType = ref('')
 
 const typeFilters = computed(() => {
@@ -138,7 +146,13 @@ const filteredTrips = computed(() =>
 
 onMounted(async () => {
   try { trips.value = await api.trips() }
-  catch (e) { console.error(e) }
+  catch (e: any) { error.value = e?.message || '請求失敗'; console.error(e) }
   finally { loading.value = false }
 })
+// 規劃中（還沒出發）與進行中分開顯示
+function phaseClass(t: any) {
+  const p = tripPhase(t)
+  return p === 'ended' ? 'bg-slate-200/80 text-slate-600'
+    : p === 'upcoming' ? 'bg-amber-100 text-amber-700' : 'bg-brand-600 text-white shadow-sm'
+}
 </script>

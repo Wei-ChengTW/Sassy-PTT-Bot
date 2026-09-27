@@ -30,13 +30,13 @@
           v-for="(u, i) in board.rows"
           :key="u.user_id"
           class="flex items-center px-4 py-3 gap-3 transition-colors hover:bg-slate-50/80"
-          :class="i === 0 ? 'bg-accent-50/40' : i === 1 ? 'bg-slate-50/60' : ''"
+          :class="ranks[i] === 1 ? 'bg-accent-50/40' : ranks[i] === 2 ? 'bg-slate-50/60' : ''"
         >
           <span
             class="w-6 text-center shrink-0 font-bold tabular-nums"
-            :class="i === 0 ? 'text-accent-600' : i === 1 ? 'text-slate-400' : i === 2 ? 'text-amber-700' : 'text-slate-300 font-normal text-xs'"
+            :class="ranks[i] === 1 ? 'text-accent-600' : ranks[i] === 2 ? 'text-slate-400' : ranks[i] === 3 ? 'text-amber-700' : 'text-slate-300 font-normal text-xs'"
           >
-            {{ medal(i) }}
+            {{ medal(ranks[i]) }}
           </span>
           <div class="flex-1 min-w-0">
             <p class="text-xs font-bold truncate text-slate-800">{{ u.name || u.user_id }}</p>
@@ -92,14 +92,14 @@ import {
 } from 'chart.js'
 import type { Board } from '@/api/client'
 import BaseCard from '@/components/BaseCard.vue'
+import { competitionRanks, medal } from '@/utils/rank'
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
 const props = defineProps<{ board: Board }>()
 
-function medal(i: number): string {
-  return ['🥇', '🥈', '🥉'][i] || String(i + 1)
-}
+// 同分同名次（例：兩人都 9 次 → 都是 🥇）
+const ranks = computed(() => competitionRanks(props.board.rows, (r) => r.value))
 
 const RADAR_COLORS = ['#f59e0b', '#6366f1', '#10b981']
 
