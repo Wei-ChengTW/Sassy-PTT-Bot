@@ -40,7 +40,13 @@ export interface AutoAlias {
 }
 export interface NicknamesData {
   max_per_member: number
-  members: { name: string; aliases: string[]; auto_aliases: AutoAlias[] }[]
+  members: {
+    name: string
+    aliases: string[]
+    auto_aliases: AutoAlias[]
+    user_id?: string | null
+    picture_url?: string | null
+  }[]
 }
 
 let _userId = ''

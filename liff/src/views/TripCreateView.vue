@@ -1,39 +1,30 @@
 <template>
-  <div class="space-y-6">
-    <button
-      @click="$router.back()"
-      class="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors inline-flex items-center gap-1 btn-press px-2.5 py-1.5 rounded-xl bg-white border border-slate-200"
-    >
-      <span>← 返回</span>
-    </button>
+  <div>
+    <PageSign title="建立旅行與事件" en="New Trip" line="trip" back="返回" />
 
-    <div class="flex items-center justify-between">
-      <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-        <span>🆕 建立旅行與事件</span>
-      </h1>
-    </div>
-
-    <BaseCard class="p-5 card-rise">
+    <BaseCard class="p-5">
       <form @submit.prevent="submit" class="space-y-5">
         <!-- 類型切換：單日事件 vs 多日旅行 -->
         <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">活動形式</label>
-          <div class="grid grid-cols-2 gap-2 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+          <label class="block text-[13px] font-bold text-slate-700 mb-2">活動形式</label>
+          <div class="grid grid-cols-2 border border-slate-300 rounded-md overflow-hidden">
             <button
               type="button"
               @click="mode = 'event'"
-              class="py-2.5 text-xs rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 btn-press"
-              :class="mode === 'event' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+              class="py-2.5 text-xs font-bold transition-colors"
+              :class="mode === 'event' ? 'bg-cloth text-white' : 'bg-white text-slate-600 hover:bg-slate-50'"
+              :aria-pressed="mode === 'event'"
             >
-              <span>⚡</span> 單日事件（當天）
+              單日事件（當天）
             </button>
             <button
               type="button"
               @click="mode = 'trip'"
-              class="py-2.5 text-xs rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 btn-press"
-              :class="mode === 'trip' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
+              class="py-2.5 text-xs font-bold transition-colors border-l border-slate-300"
+              :class="mode === 'trip' ? 'bg-cloth text-white' : 'bg-white text-slate-600 hover:bg-slate-50'"
+              :aria-pressed="mode === 'trip'"
             >
-              <span>🧳</span> 多日旅行（跨日）
+              多日旅行（跨日）
             </button>
           </div>
         </div>
@@ -41,81 +32,80 @@
         <!-- 標題與自訂 Emoji -->
         <div class="flex gap-3 items-start">
           <div class="w-18 shrink-0">
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Emoji</label>
+            <label class="block text-[13px] font-bold text-slate-700 mb-1.5">Emoji</label>
             <input
               v-model="form.custom_emoji"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2.5 text-center text-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white transition-all"
+              class="w-full bg-white border border-slate-300 rounded-md px-2 py-2.5 text-center text-xl focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
               placeholder="🎒"
             />
           </div>
           <div class="flex-1 min-w-0">
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">名稱 / 標題 *</label>
+            <label class="block text-[13px] font-bold text-slate-700 mb-1.5">名稱 / 標題 *</label>
             <input
               v-model="form.title"
               required
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white transition-all"
+              class="w-full bg-white border border-slate-300 rounded-md px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
               :placeholder="mode === 'event' ? '例如：聚餐吃火鍋、夜唱' : '例如：花東三日遊、宜蘭包棟'"
             />
           </div>
         </div>
 
         <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">活動地點 *</label>
+          <label class="block text-[13px] font-bold text-slate-700 mb-1.5">活動地點 *</label>
           <input
             v-model="form.location"
             required
-            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white transition-all"
+            class="w-full bg-white border border-slate-300 rounded-md px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             placeholder="例如：墾丁、內湖高中、宜蘭礁溪"
           />
         </div>
 
         <!-- 日期選擇 -->
         <div v-if="mode === 'event'">
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">發生日期 *</label>
+          <label class="block text-[13px] font-bold text-slate-700 mb-1.5">發生日期 *</label>
           <input
             v-model="form.startDate"
             type="date"
             required
-            class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white transition-all"
+            class="w-full bg-white border border-slate-300 rounded-md px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
           />
         </div>
         <div v-else class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">開始日期 *</label>
+            <label class="block text-[13px] font-bold text-slate-700 mb-1.5">開始日期 *</label>
             <input
               v-model="form.startDate"
               type="date"
               required
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white transition-all"
+              class="w-full bg-white border border-slate-300 rounded-md px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             />
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">結束日期 *</label>
+            <label class="block text-[13px] font-bold text-slate-700 mb-1.5">結束日期 *</label>
             <input
               v-model="form.endDate"
               type="date"
               required
               :min="form.startDate"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white transition-all"
+              class="w-full bg-white border border-slate-300 rounded-md px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
             />
           </div>
         </div>
 
         <!-- 類型標籤 -->
         <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">類型標籤（可複選）</label>
+          <label class="block text-[13px] font-bold text-slate-700 mb-2">類型標籤（可複選）</label>
           <div class="flex flex-wrap gap-2">
             <button
               v-for="t in TRIP_TYPES"
               :key="t.value"
               type="button"
               @click="toggleType(t.value)"
-              class="rounded-full px-3 py-1.5 text-xs font-semibold border transition-all duration-150 btn-press"
-              :class="form.types.includes(t.value)
-                ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+              class="rounded-md px-3 py-1.5 text-xs font-medium border transition-all duration-150 btn-press"
+              :class="form.types.includes(t.value) ? 'bg-cloth text-white border-cloth'
+                : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'"
             >
-              {{ t.emoji }} {{ t.label }}
+              {{ t.label }}
             </button>
           </div>
         </div>
@@ -124,14 +114,14 @@
           <button
             type="submit"
             :disabled="loading"
-            class="flex-1 bg-brand-600 hover:bg-brand-700 text-white rounded-xl py-3 text-sm font-bold shadow-md shadow-brand-500/20 disabled:opacity-50 transition-all btn-press"
+            class="flex-1 bg-brand-500 hover:bg-brand-600 text-white rounded-md py-3 text-sm font-bold disabled:opacity-50 transition-all btn-press"
           >
             {{ loading ? '建立中...' : (mode === 'event' ? '建立事件' : '建立旅行') }}
           </button>
           <button
             type="button"
             @click="$router.back()"
-            class="px-5 border border-slate-200 rounded-xl py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all btn-press"
+            class="px-5 border border-slate-300 rounded-md py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-all btn-press"
           >
             取消
           </button>
@@ -143,6 +133,7 @@
 </template>
 
 <script setup lang="ts">
+import PageSign from '@/components/PageSign.vue'
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '@/api/client'

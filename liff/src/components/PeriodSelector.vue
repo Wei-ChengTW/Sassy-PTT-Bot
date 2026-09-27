@@ -1,22 +1,20 @@
 <template>
-  <div class="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200/70 px-4 py-2 flex items-center gap-2.5 shadow-xs">
-    <span class="text-xs font-semibold text-slate-500 shrink-0 flex items-center gap-1">
-      <span>📅</span>
-      <span>期間</span>
-    </span>
+  <label class="flex items-center gap-2 text-white/90">
+    <span class="text-xs shrink-0">期間</span>
     <select
       v-model="period" @change="onChange"
-      class="flex-1 text-xs bg-slate-50/80 border border-slate-200 rounded-xl px-2.5 py-1.5 text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white transition-all cursor-pointer"
+      class="min-w-0 max-w-[9.5rem] text-xs bg-white/10 border border-white/25 rounded-md pl-2 pr-6 py-1 text-white font-medium focus:outline-none focus:border-white cursor-pointer appearance-none bg-no-repeat"
+      :style="{ backgroundImage: chevron, backgroundPosition: 'right 6px center', backgroundSize: '10px' }"
     >
-      <option value="all">✨ 全部時間</option>
-      <optgroup v-if="years.length" label="歷年">
+      <option value="all" class="text-slate-900">全部時間</option>
+      <optgroup v-if="years.length" label="歷年" class="text-slate-900">
         <option v-for="y in years" :key="y" :value="y">{{ y }} 年</option>
       </optgroup>
-      <optgroup v-if="months.length" label="月份">
+      <optgroup v-if="months.length" label="月份" class="text-slate-900">
         <option v-for="m in months" :key="m" :value="m">{{ formatMonth(m) }}</option>
       </optgroup>
     </select>
-  </div>
+  </label>
 </template>
 
 <script setup lang="ts">
@@ -28,6 +26,8 @@ const router = useRouter()
 const period = ref(getPeriod())
 const years = ref<string[]>([])
 const months = ref<string[]>([])
+
+const chevron = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E")`
 
 function formatMonth(m: string) {
   const [y, mo] = m.split('-')

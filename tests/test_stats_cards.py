@@ -54,9 +54,15 @@ BADGES = [{"badge_name": "露營王", "badge_rarity": "epic", "badge_emoji": "�
 
 def test_leaderboard_card_has_ranking():
     b = cards.build_leaderboard_card(LEAD, LIFF)
-    assert b.header.contents[0].text.startswith("🏆")
-    # body 有兩位排行者
+    assert b.header.contents[0].text == "發言排行"
+    # 第 1 名放大（hero）+ 第 2 名一列
     assert len(b.body.contents) == 2
+    assert "阿明" in _all_text(b.body.contents[0]) and "小華" in _all_text(b.body.contents[1])
+
+
+def test_leaderboard_alt_shows_first_place():
+    assert cards.leaderboard_alt(LEAD) == "發言排行：第 1 名 阿明 40 則"
+    assert cards.leaderboard_alt({"rankings": []}).startswith("發言排行：")
 
 
 def test_leaderboard_card_empty_graceful():
@@ -65,8 +71,8 @@ def test_leaderboard_card_empty_graceful():
 
 
 def test_nightowl_and_pairs_and_topics_build():
-    assert cards.build_nightowl_card(LEAD, LIFF).header.contents[0].text.startswith("🦉")
-    assert cards.build_pairs_card(INTER, LIFF).header.contents[0].text.startswith("🤝")
+    assert cards.build_nightowl_card(LEAD, LIFF).header.contents[0].text == "夜貓榜"
+    assert cards.build_pairs_card(INTER, LIFF).header.contents[0].text == "最佳拍檔"
     tcard = cards.build_topics_card(TOPICS, LIFF)
     # 關鍵字與金句都在 body
     joined = _all_text(tcard.body)
@@ -104,9 +110,58 @@ def test_personal_card_includes_name_and_best_friend():
     assert all_imgs[0].url == "https://profile.line-scdn.net/abc"
 
 
-def test_quick_reply_has_five_items():
+def test_quick_reply_fills_line_limit():
     qr = cards.stats_quick_reply(LIFF)
-    assert len(qr.items) == 5
+    assert len(qr.items) == 13   # LINE Quick Reply 上限
+    labels = [i.action.label for i in qr.items]
+    assert "晨型人" in labels and labels[-1] == "打開紀念冊"
+
+
+def test_board_card_deep_links_to_board_and_inverts_ascending():
+    board = {"id": "reply_speed", "title": "閃電回覆王", "subtitle": "平均回覆分鐘",
+             "rows": [{"name": "A", "value": 2, "value_str": "2 分"},
+                      {"name": "B", "value": 8, "value_str": "8 分"}],
+             "highlight": None}
+    b = cards.build_board_card(board, LIFF)
+    assert b.footer.contents[0].action.uri == f"{LIFF}/leaderboard?board=reply_speed"
+    # 第 2 名比例條：數值越小越好 → 2/8 = 25%
+    bar = b.body.contents[1].contents[1].contents[0]
+    assert bar.width == "25%"
+    assert cards.board_alt(board) == "閃電回覆王：第 1 名 A 2 分"
+
+
+def test_entry_card_has_four_links_and_admin_button():
+    msg = cards.build_entry_card(LIFF, is_admin=True)
+    rows = msg.contents.body.contents
+    uris = [cell.action.uri for row in rows for cell in row.contents]
+    assert uris == [f"{LIFF}/", f"{LIFF}/leaderboard", f"{LIFF}/timeline", f"{LIFF}/profile"]
+    assert msg.contents.footer.contents[0].action.uri == f"{LIFF}/admin"
+    assert cards.build_entry_card(LIFF).contents.footer is None
+
+
+def test_countdown_card_alt_and_link():
+    trip = {"id": "t1", "title": "韓國小滑雪", "location": "韓國", "start_date": 1800000000,
+            "rarity": "epic", "badge_emoji": "🏂"}
+    assert cards.build_countdown_card(trip, 7, LIFF).alt_text == "韓國小滑雪：還有 7 天出發"
+    assert cards.build_countdown_card(trip, 0, LIFF).alt_text == "韓國小滑雪：今天出發"
+    assert cards.build_countdown_card(trip, 7, LIFF).contents.footer.contents[0].action.uri == f"{LIFF}/trips/t1"
+
+
+def test_badge_award_card_lists_everyone():
+    trip = {"id": "t1", "title": "墾丁一日遊"}
+    awarded = [{"user_name": "阿明", "badge_emoji": "🏖️", "badge_rarity": "legendary"},
+               {"user_name": "小華", "badge_emoji": "🏖️", "badge_rarity": "legendary"}]
+    msg = cards.build_badge_award_card(trip, awarded, LIFF)
+    assert msg.alt_text == "徽章頒發：墾丁一日遊（傳說）2 人獲得"
+    assert "阿明、小華" in _all_text(msg.contents.body)
+
+
+def test_on_this_day_card_none_when_empty():
+    assert cards.build_on_this_day_card([], None, LIFF) is None
+    trips = [{"id": "t9", "title": "花東三日遊", "years_ago": 2, "rarity": "rare"}]
+    msg = cards.build_on_this_day_card(trips, {"content": "笑死", "user_name": "阿明"}, LIFF)
+    assert msg.alt_text.startswith("那年今日：2 年前的今天")
+    assert "笑死" in _all_text(msg.contents.body)
 
 
 def test_competition_ranks_ties_share_rank():

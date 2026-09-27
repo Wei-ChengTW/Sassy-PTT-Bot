@@ -353,6 +353,28 @@ def test_nicknames_only_for_main_group(client, monkeypatch, tmp_path):
     assert client.get("/liff/nicknames", headers=headers).get_json()["members"] == []
 
 
+
+def test_nicknames_attach_user_id_and_picture(client, monkeypatch, tmp_path):
+    import json
+    import corpus_config
+    from line_bot import liff_api
+    p = tmp_path / "aliases.json"
+    p.write_text(json.dumps({
+        "Member": {"aliases": [], "auto_aliases": [
+            {"name": "稱號", "reason": "r", "created": "2026-09-20", "window_days": 7},
+        ]},
+    }, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(corpus_config, "ALIASES_FILE_PATH", p)
+    monkeypatch.setenv("MAIN_LINE_GROUP_ID", "C1")
+    calls = []
+    monkeypatch.setattr(liff_api, "_get_member_picture",
+                        lambda g, u: calls.append((g, u)) or f"https://pic/{u}")
+    data = client.get("/liff/nicknames", headers=_headers()).get_json()
+    m = data["members"][0]
+    assert m["user_id"] == "U_MEMBER"   # seed 訊息的 user_name="Member"
+    assert m["picture_url"] == "https://pic/U_MEMBER"
+    assert calls == [("C1", "U_MEMBER")]
+
 def test_admin_participants_replace(client, db):
     from travel.trip_crud import create_trip, add_participants
     trip_id = create_trip("C1", "t", "x", 1700000000, None, "U_ADMIN")

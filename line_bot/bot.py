@@ -478,9 +478,10 @@ class SassyBrain:
                 )
                 logger.info("[AGGREGATOR] 每日 04:00 聚合排程已啟動")
 
-                from travel.badges import process_ended_trips
+                # 發徽章並在群組推頒獎卡
+                from line_bot.notify import award_and_announce_ended_trips
                 self._scheduler.add_job(
-                    process_ended_trips,
+                    award_and_announce_ended_trips,
                     trigger='cron',
                     minute=5,
                     id='badge_award',
@@ -489,8 +490,10 @@ class SassyBrain:
                 )
                 logger.info("[BADGE] 每小時 :05 徽章發放排程已啟動")
 
+                # 那年今日（取代舊的純文字旅行週年提醒）：往年同日出發的旅行 + 一年前今天的金句
+                from line_bot.notify import send_on_this_day, send_trip_countdowns
                 self._scheduler.add_job(
-                    self._send_anniversary_reminders,
+                    send_on_this_day,
                     trigger='cron',
                     hour=10,
                     minute=0,
@@ -498,7 +501,19 @@ class SassyBrain:
                     misfire_grace_time=3600,
                     coalesce=True,
                 )
-                logger.info("[ANNIVERSARY] 每日 10:00 旅行週年提醒排程已啟動")
+                logger.info("[ON_THIS_DAY] 每日 10:00 那年今日排程已啟動")
+
+                # 旅行出發倒數（與畢業倒數分開）：出發前 30/14/7/3/1 天與當天
+                self._scheduler.add_job(
+                    send_trip_countdowns,
+                    trigger='cron',
+                    hour=9,
+                    minute=30,
+                    id='trip_countdown',
+                    misfire_grace_time=3600,
+                    coalesce=True,
+                )
+                logger.info("[COUNTDOWN] 每日 09:30 旅行出發倒數排程已啟動")
 
                 # 方案 D：週報／月報自動排程「暫不啟用」（資料量足夠再開）。
                 # 目前改由管理員手動觸發：群組內輸入「/stats 推播週」或「/stats 推播月」。
@@ -518,43 +533,9 @@ class SassyBrain:
         return is_admin_dm(event)
 
     def _reply_liff_button(self, event, role: str) -> None:
-        """Reply with a Flex Message LIFF button."""
-        from linebot.v3.messaging import (
-            FlexMessage, FlexBubble, FlexBox, FlexText, FlexButton, URIAction,
-        )
-        if role == "admin":
-            title = "🛠️ 管理員面板"
-            subtitle = "點按下方按鈕進入管理後台"
-            btn_label = "🛠️ 進入管理面板"
-            path = "/admin"
-        else:
-            title = "🧳 旅行回顧"
-            subtitle = "點按查看群組儀表板與徽章"
-            btn_label = "🧳 開啟旅行回顧"
-            path = "/"
-
-        uri = f"{LIFF_URL}{path}"
-        flex_msg = FlexMessage(
-            alt_text=title,
-            contents=FlexBubble(
-                body=FlexBox(
-                    layout="vertical",
-                    contents=[
-                        FlexText(text=title, weight="bold", size="lg"),
-                        FlexText(text=subtitle, size="sm", color="#999999"),
-                    ],
-                ),
-                footer=FlexBox(
-                    layout="vertical",
-                    contents=[
-                        FlexButton(
-                            action=URIAction(label=btn_label, uri=uri),
-                            style="primary",
-                        )
-                    ],
-                ),
-            ),
-        )
+        """Reply with the LIFF entry card（四格選單；管理員多一顆後台按鈕）。"""
+        import line_bot.stats_cards as cards
+        flex_msg = cards.build_entry_card(LIFF_URL, is_admin=(role == "admin"))
         try:
             self.line_api.reply_message(
                 ReplyMessageRequest(reply_token=event.reply_token, messages=[flex_msg]),
@@ -642,23 +623,26 @@ class SassyBrain:
                 board = get_board(kw, group_id, "all")
                 if board:
                     bubble = cards.build_board_card(board, LIFF_URL)
-                    self._reply_flex(event, cards.wrap_single(
-                        bubble, f"{board['emoji']} {board['title']}"))
+                    self._reply_flex(event, cards.wrap_single(bubble, cards.board_alt(board)))
                 else:
                     menu = "、".join(board_menu())
                     self._reply_text(event, f"找不到「{kw}」排行榜 🤔\n可用排行榜：\n{menu}")
             elif arg in ("排行", "發言排行", "leaderboard", "rank"):
-                bubble = cards.build_leaderboard_card(get_leaderboard_data(group_id, "all"), LIFF_URL)
-                self._reply_flex(event, cards.wrap_single(bubble, "🏆 發言排行"))
+                lead = get_leaderboard_data(group_id, "all")
+                bubble = cards.build_leaderboard_card(lead, LIFF_URL)
+                self._reply_flex(event, cards.wrap_single(bubble, cards.leaderboard_alt(lead)))
             elif arg in ("夜貓", "夜貓榜", "nightowl", "owl"):
-                bubble = cards.build_nightowl_card(get_leaderboard_data(group_id, "all"), LIFF_URL)
-                self._reply_flex(event, cards.wrap_single(bubble, "🦉 夜貓榜"))
+                lead = get_leaderboard_data(group_id, "all")
+                bubble = cards.build_nightowl_card(lead, LIFF_URL)
+                self._reply_flex(event, cards.wrap_single(bubble, cards.nightowl_alt(lead)))
             elif arg in ("cp", "最佳cp", "pair", "羈絆"):
-                bubble = cards.build_pairs_card(get_interaction_data(group_id, "all"), LIFF_URL)
-                self._reply_flex(event, cards.wrap_single(bubble, "💞 最佳 CP"))
+                inter = get_interaction_data(group_id, "all")
+                bubble = cards.build_pairs_card(inter, LIFF_URL)
+                self._reply_flex(event, cards.wrap_single(bubble, cards.pairs_alt(inter)))
             elif arg in ("話題", "熱門話題", "topic", "topics", "關鍵字"):
-                bubble = cards.build_topics_card(get_topics_data(group_id, "all"), LIFF_URL)
-                self._reply_flex(event, cards.wrap_single(bubble, "🔥 熱門話題"))
+                topics = get_topics_data(group_id, "all")
+                bubble = cards.build_topics_card(topics, LIFF_URL)
+                self._reply_flex(event, cards.wrap_single(bubble, cards.topics_alt(topics)))
             else:
                 # 無子指令 → 近 30 天摘要輪播 + Quick Reply
                 carousel = cards.build_report_carousel(
@@ -1822,36 +1806,6 @@ class SassyBrain:
                 if attempt == 0:
                     time.sleep(2)
         return False
-
-    def _send_anniversary_reminders(self):
-        """每日 10:00：偵測一年前結束的旅行，推送週年提醒到對應群組。"""
-        if not self.line_api:
-            return
-        try:
-            from travel.trip_crud import get_anniversary_trips
-            trips = get_anniversary_trips()
-        except Exception as e:
-            logger.warning(f"[ANNIVERSARY] 查詢週年旅行失敗: {e}")
-            return
-        for trip in trips:
-            group_id = trip.get("group_id")
-            if not group_id:
-                continue
-            title = trip.get("title") or "旅行"
-            location = trip.get("location") or ""
-            loc_suffix = f"（{location}）" if location else ""
-            msg = f"🎉 一年前的今天，你們完成了「{title}」{loc_suffix}！\n是時候計劃下一趟旅程了嗎？🗺️"
-            try:
-                self.line_api.push_message(
-                    PushMessageRequest(
-                        to=group_id,
-                        messages=[LineTextMessage(text=msg)],
-                    ),
-                    _request_timeout=10.0,
-                )
-                logger.info(f"[ANNIVERSARY] 推送週年提醒 trip={trip['id']} group={group_id}")
-            except Exception as e:
-                logger.warning(f"[ANNIVERSARY] 推送失敗 trip={trip['id']}: {e}")
 
     def _stats_push_targets(self, period: str) -> list[str]:
         """決定要推播戰報的群組：優先 PUSH_GROUP_IDS 環境變數，否則取近期有發言的群組。"""

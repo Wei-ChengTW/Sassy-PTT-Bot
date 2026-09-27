@@ -1,35 +1,26 @@
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-        <span>🏆 榮譽排行榜</span>
-      </h1>
-    </div>
+  <div>
+    <PageSign title="榮譽排行榜" en="Class Honors" />
 
     <!-- Skeleton -->
-    <div v-if="loading" class="space-y-6">
-      <div class="skeleton h-4 w-32 rounded-full" />
-      <div class="bg-white rounded-2xl p-4 border border-slate-100 divide-y divide-slate-100">
-        <div v-for="i in 5" :key="i" class="flex items-center py-3 gap-3">
-          <div class="skeleton w-6 h-4 rounded" />
-          <div class="skeleton flex-1 h-4 rounded-full" />
-          <div class="skeleton w-12 h-4 rounded" />
-        </div>
+    <div v-if="loading" class="bg-white rounded-xl border border-slate-200 px-4 divide-y divide-slate-100">
+      <div v-for="i in 5" :key="i" class="flex items-center py-3 gap-3">
+        <div class="skeleton w-7 h-7 rounded-md" />
+        <div class="skeleton flex-1 h-4 rounded" />
+        <div class="skeleton w-12 h-4 rounded" />
       </div>
     </div>
 
     <EmptyState
       v-else-if="error"
-      icon="⚠️"
       title="無法載入資料"
       :description="error"
     />
 
-    <div v-else-if="data" class="space-y-6">
+    <div v-else-if="data">
       <!-- 徽章成就排行 -->
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <SectionHeader title="徽章成就榜" icon="🏅" class="!mt-0 !mb-0" />
+      <SectionHeader title="徽章成就榜" class="!mt-0">
+        <template #action>
           <SegmentedControl
             v-model="badgeSortMode"
             :options="[
@@ -37,81 +28,28 @@
               { label: '總枚數', value: 'count' }
             ]"
           />
-        </div>
-        <p class="text-[11px] text-slate-400 mb-3" v-if="badgeSortMode === 'weighted'">
-          計分規則：傳說 2.0 · 史詩 1.5 · 極稀有 1.0 · 稀有 0.8 · 普通 0.5
-        </p>
-        
-        <BaseCard class="overflow-hidden card-rise">
-          <div class="divide-y divide-slate-100">
-            <div
-              v-for="(u, i) in sortedBadgeRankings"
-              :key="u.user_id"
-              class="flex items-center px-4 py-3.5 gap-3 transition-colors hover:bg-slate-50/80"
-              :class="badgeRanks[i] === 1 ? 'bg-accent-50/40' : badgeRanks[i] === 2 ? 'bg-slate-50/60' : ''"
-            >
-              <!-- Medal / Rank -->
-              <span
-                class="text-sm w-6 text-center font-bold tabular-nums shrink-0"
-                :class="badgeRanks[i] === 1 ? 'text-accent-600' : badgeRanks[i] === 2 ? 'text-slate-400' : badgeRanks[i] === 3 ? 'text-amber-700' : 'text-slate-300 font-normal'"
-              >
-                {{ medal(badgeRanks[i]) }}
-              </span>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold truncate" :class="badgeRanks[i] === 1 ? 'text-amber-950' : 'text-slate-800'">
-                  {{ u.user_name || u.user_id }}
-                </p>
-                <!-- 稀有度分佈 pills -->
-                <div class="flex items-center gap-1.5 mt-1 text-[10px] flex-wrap">
-                  <span v-if="u.legendary_count" class="px-1.5 py-0.2 rounded bg-rose-50 text-rose-600 font-bold border border-rose-100">
-                    傳說 {{ u.legendary_count }}
-                  </span>
-                  <span v-if="u.epic_count" class="px-1.5 py-0.2 rounded bg-purple-50 text-purple-600 font-bold border border-purple-100">
-                    史詩 {{ u.epic_count }}
-                  </span>
-                  <span v-if="u.super_rare_count" class="px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 font-bold border border-amber-100">
-                    極稀有 {{ u.super_rare_count }}
-                  </span>
-                  <span v-if="u.rare_count" class="px-1.5 py-0.2 rounded bg-sky-50 text-sky-700 font-medium border border-sky-100">
-                    稀有 {{ u.rare_count }}
-                  </span>
-                  <span v-if="u.common_count" class="px-1.5 py-0.2 rounded bg-slate-50 text-slate-600 font-medium border border-slate-200">
-                    普通 {{ u.common_count }}
-                  </span>
-                </div>
-              </div>
-              <div class="text-right shrink-0">
-                <template v-if="badgeSortMode === 'weighted'">
-                  <span
-                    class="text-base font-black font-mono tabular-nums"
-                    :class="badgeRanks[i] === 1 ? 'text-accent-600' : 'text-brand-600'"
-                  >
-                    {{ u.score }}
-                  </span>
-                  <span class="text-[10px] font-medium text-slate-400 block -mt-1">分 ({{ u.badge_count }}枚)</span>
-                </template>
-                <template v-else>
-                  <span
-                    class="text-base font-black font-mono tabular-nums"
-                    :class="badgeRanks[i] === 1 ? 'text-accent-600' : 'text-slate-800'"
-                  >
-                    {{ u.badge_count }}
-                  </span>
-                  <span class="text-xs font-normal text-slate-400 block -mt-1">枚徽章</span>
-                </template>
-              </div>
-            </div>
-            <div v-if="!sortedBadgeRankings.length" class="px-4 py-8 text-sm text-slate-400 text-center">
-              尚無徽章數據
-            </div>
-          </div>
-        </BaseCard>
-      </div>
+        </template>
+      </SectionHeader>
+      <p class="text-xs text-slate-500 mb-3 -mt-1" v-if="badgeSortMode === 'weighted'">
+        計分規則：傳說 2.0 · 史詩 1.5 · 極稀有 1.0 · 稀有 0.8 · 普通 0.5
+      </p>
+
+      <RankList v-if="sortedBadgeRankings.length" :rows="badgeRows" :ranks="badgeRanks"
+                :unit="badgeSortMode === 'weighted' ? '分' : '枚'">
+        <template #detail="{ row, tone }">
+          <span class="inline-flex flex-wrap gap-x-2 gap-y-0.5">
+            <span v-for="r in RARITY_COUNTS" :key="r.key" v-show="row[r.key]" class="inline-flex items-center gap-1">
+              <span class="w-1.5 h-1.5 rounded-full" :style="{ background: r.line }" aria-hidden="true" />
+              {{ r.zh }} <span class="font-num" :class="tone === 'cover' ? 'text-white' : 'text-slate-800'">{{ row[r.key] }}</span>
+            </span>
+          </span>
+        </template>
+      </RankList>
+      <BaseCard v-else class="px-4 py-8 text-sm text-slate-500 text-center">尚無徽章數據</BaseCard>
 
       <!-- 發言活躍排行 -->
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <SectionHeader title="發言活躍排行" icon="💬" class="!mt-0 !mb-0" />
+      <SectionHeader title="發言活躍排行">
+        <template #action>
           <SegmentedControl
             v-model="activeMessageFilter"
             :options="[
@@ -121,117 +59,61 @@
               { label: '圖片', value: 'image' }
             ]"
           />
-        </div>
+        </template>
+      </SectionHeader>
 
-        <BaseCard class="overflow-hidden card-rise">
-          <div class="divide-y divide-slate-100">
-            <div
-              v-for="(u, i) in sortedMessageRankings"
-              :key="u.user_id"
-              class="flex items-center px-4 py-3.5 gap-3 transition-colors hover:bg-slate-50/80"
-              :class="msgRanks[i] === 1 ? 'bg-accent-50/40' : msgRanks[i] === 2 ? 'bg-slate-50/60' : ''"
-            >
-              <!-- Medal / Rank -->
-              <span
-                class="text-sm w-6 text-center font-bold tabular-nums shrink-0"
-                :class="msgRanks[i] === 1 ? 'text-accent-600' : msgRanks[i] === 2 ? 'text-slate-400' : msgRanks[i] === 3 ? 'text-amber-700' : 'text-slate-300 font-normal'"
-              >
-                {{ medal(msgRanks[i]) }}
-              </span>
-              <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold truncate" :class="msgRanks[i] === 1 ? 'text-amber-950' : 'text-slate-800'">
-                  {{ u.user_name || u.user_id }}
-                </p>
-                <!-- 訊息類型分佈 pills -->
-                <div class="flex items-center gap-1.5 mt-1 text-[10px] flex-wrap">
-                  <span v-if="u.text_count" class="px-1.5 py-0.2 rounded bg-blue-50 text-blue-600 font-medium border border-blue-100">
-                    💬 {{ u.text_count }}
-                  </span>
-                  <span v-if="u.sticker_count" class="px-1.5 py-0.2 rounded bg-pink-50 text-pink-600 font-medium border border-pink-100">
-                    🎭 {{ u.sticker_count }}
-                  </span>
-                  <span v-if="u.image_count" class="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-600 font-medium border border-emerald-100">
-                    📸 {{ u.image_count }}
-                  </span>
-                  <span v-if="u.video_count" class="px-1.5 py-0.2 rounded bg-orange-50 text-orange-600 font-medium border border-orange-100">
-                    🎬 {{ u.video_count }}
-                  </span>
-                </div>
-              </div>
-              <div class="text-right shrink-0">
-                <span
-                  class="text-base font-black font-mono tabular-nums"
-                  :class="msgRanks[i] === 1 ? 'text-accent-600' : 'text-slate-800'"
-                >
-                  {{ (displayCountOf(u)).toLocaleString() }}
-                </span>
-                <span class="text-xs font-normal text-slate-400 block -mt-1">則{{ filterUnitText }}</span>
-              </div>
-            </div>
-            <div v-if="!sortedMessageRankings.length" class="px-4 py-8 text-sm text-slate-400 text-center">
-              尚無發言數據
-            </div>
-          </div>
-        </BaseCard>
-      </div>
+      <RankList v-if="sortedMessageRankings.length" :rows="msgRows" :ranks="msgRanks" unit="則">
+        <template #detail="{ row }">
+          <span v-if="msgTotal">佔 <span class="font-num">{{ (row.value / msgTotal * 100).toFixed(1) }}%</span></span>
+          <template v-if="activeMessageFilter === 'all'">
+            <span v-for="t in MSG_COUNTS" :key="t.key" v-show="row[t.key]" class="ml-2">{{ t.zh }} <span class="font-num">{{ row[t.key] }}</span></span>
+          </template>
+        </template>
+      </RankList>
+      <BaseCard v-else class="px-4 py-8 text-sm text-slate-500 text-center">尚無發言數據</BaseCard>
 
       <!-- 訊息類型圓餅圖 -->
-      <div>
-        <SectionHeader title="訊息型態佔比" icon="🥧" />
-        <BaseCard class="p-4 card-rise">
-          <Pie :data="pieChartData" :options="pieOptions" style="max-height:200px" />
-        </BaseCard>
-      </div>
+      <SectionHeader title="訊息型態佔比" />
+      <BaseCard class="p-4">
+        <Pie :data="pieChartData" :options="pieOptions" style="max-height:200px" />
+      </BaseCard>
 
       <!-- 夜貓子排行 -->
-      <div>
-        <SectionHeader title="夜貓子排行榜" icon="🦉" subtitle="0–4 點深夜發言" />
-        <BaseCard class="overflow-hidden card-rise">
-          <div class="divide-y divide-slate-100">
-            <div
-              v-for="(u, i) in data.night_owls"
-              :key="u.user_id"
-              class="flex items-center px-4 py-3.5 gap-3"
-            >
-              <span class="text-slate-300 text-sm w-5 tabular-nums font-medium">{{ nightRanks[i] }}</span>
-              <span class="flex-1 text-sm font-semibold text-slate-800 truncate">{{ u.user_name || u.user_id }}</span>
-              <span class="text-sm font-bold font-mono tabular-nums text-purple-600">
-                {{ u.night_count }}
-                <span class="text-xs font-normal text-slate-400">則</span>
-              </span>
-            </div>
-            <div v-if="!data.night_owls.length" class="px-4 py-8 text-sm text-slate-400 text-center">
-              深夜無人發言，大家作息都很健康 🌙
-            </div>
-          </div>
-        </BaseCard>
-      </div>
+      <SectionHeader title="夜貓子排行榜" subtitle="0–4 點深夜發言" />
+      <RankList v-if="data.night_owls.length" :rows="nightRows" :ranks="nightRanks" unit="則" />
+      <BaseCard v-else class="px-4 py-8 text-sm text-slate-500 text-center">深夜無人發言，大家作息都很健康</BaseCard>
 
       <!-- 更多排行榜（資料驅動） -->
       <div v-if="boards.length">
-        <SectionHeader title="更多自訂排行榜" icon="🎯" />
-        <div class="flex flex-wrap gap-2 mb-4">
+        <SectionHeader title="更多自訂排行榜" />
+        <div class="scroll-row mb-5">
           <button
             v-for="b in boards"
             :key="b.id"
-            @click="selectedId = b.id"
-            class="px-3.5 py-1.5 rounded-full text-xs font-bold border transition-all duration-150 btn-press whitespace-nowrap select-none"
+            @click="(e: MouseEvent) => { selectedId = b.id; (e.currentTarget as HTMLElement).scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' }) }"
+            class="px-3 py-1.5 rounded-md text-xs font-medium border btn-press whitespace-nowrap select-none shrink-0"
             :class="selectedId === b.id
-              ? 'bg-brand-600 text-white border-brand-600 shadow-sm ring-2 ring-brand-200'
-              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'"
+              ? 'bg-cloth text-white border-cloth'
+              : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'"
+            :aria-pressed="selectedId === b.id"
           >
-            {{ b.emoji }} {{ b.title }}
+            {{ b.title }}
           </button>
         </div>
-        <BoardCard v-if="selectedBoard" :board="selectedBoard" />
+        <BoardCard v-if="selectedBoard" id="board-detail" class="scroll-mt-4" :board="selectedBoard" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { competitionRanks, medal } from '@/utils/rank'
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRoute } from 'vue-router'
+import { competitionRanks } from '@/utils/rank'
+import { RARITY } from '@/constants/rarity'
+import PageSign from '@/components/PageSign.vue'
+import RankList from '@/components/RankList.vue'
+import { TYPE_COLORS, TYPE_LABELS } from '@/constants/chartColors'
 import { Pie } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { api, type Board } from '@/api/client'
@@ -250,6 +132,7 @@ const error = ref('')
 const badgeSortMode = ref<'weighted' | 'count'>('weighted')
 const activeMessageFilter = ref<'all' | 'text' | 'sticker' | 'image'>('all')
 const boards = ref<Board[]>([])
+const route = useRoute()
 const selectedId = ref('')
 const selectedBoard = computed(() => boards.value.find(b => b.id === selectedId.value) || null)
 
@@ -295,20 +178,36 @@ const sortedMessageRankings = computed(() => {
   return list.sort((a, b) => displayCountOf(b) - displayCountOf(a))
 })
 
-const TYPE_COLORS: Record<string, string> = {
-  text: '#60a5fa', sticker: '#f472b6', image: '#34d399',
-  video: '#fb923c', audio: '#a78bfa', file: '#94a3b8',
-}
+const RARITY_COUNTS = (['legendary', 'epic', 'super_rare', 'rare', 'common'] as const)
+  .map(k => ({ key: `${k}_count`, zh: RARITY[k].zh, line: RARITY[k].line }))
+
+const badgeRows = computed(() => sortedBadgeRankings.value.map((u: any) => {
+  const v = badgeSortMode.value === 'weighted' ? u.score : u.badge_count
+  return { ...u, id: u.user_id, name: u.user_name || u.user_id, value: v, valueStr: String(v) }
+}))
+const msgRows = computed(() => sortedMessageRankings.value.map((u: any) => {
+  const v = displayCountOf(u)
+  return { ...u, id: u.user_id, name: u.user_name || u.user_id, value: v, valueStr: v.toLocaleString() }
+}))
+const nightRows = computed(() => (data.value?.night_owls || []).map((u: any) => ({
+  ...u, id: u.user_id, name: u.user_name || u.user_id, value: u.night_count, valueStr: String(u.night_count),
+})))
+
+const msgTotal = computed(() => sortedMessageRankings.value.reduce((n: number, u: any) => n + displayCountOf(u), 0))
+
+const MSG_COUNTS = (['text', 'sticker', 'image', 'video'] as const)
+  .map(t => ({ key: `${t}_count`, type: t, zh: TYPE_LABELS[t] }))
 
 const pieChartData = computed(() => {
   if (!data.value) return { labels: [], datasets: [] }
   const dist = data.value.type_distribution
   return {
-    labels: dist.map((d: any) => d.type),
+    labels: dist.map((d: any) => TYPE_LABELS[d.type] || d.type),
     datasets: [{
       data: dist.map((d: any) => d.count),
-      backgroundColor: dist.map((d: any) => TYPE_COLORS[d.type] || '#94a3b8'),
-      borderWidth: 0,
+      backgroundColor: dist.map((d: any) => TYPE_COLORS[d.type] || '#8C938C'),
+      borderWidth: 2,
+      borderColor: '#fff',
     }],
   }
 })
@@ -319,8 +218,9 @@ const pieOptions = {
     legend: {
       position: 'bottom' as const,
       labels: {
-        font: { size: 12, family: 'Inter, Noto Sans TC' },
+        font: { size: 12, family: '"Noto Sans TC", sans-serif' },
         padding: 12,
+        boxWidth: 10,
       },
     },
   },
@@ -331,6 +231,9 @@ async function loadLeaderboards() {
     const [lead, more] = await Promise.all([api.leaderboard(), api.leaderboards()])
     data.value = lead
     boards.value = more.boards || []
+    // LINE 排行卡片會帶 ?board=<id>，直接選好那個排行榜
+    const wanted = route.query.board as string | undefined
+    if (wanted && boards.value.some(b => b.id === wanted)) selectedId.value = wanted
     if (boards.value.length && !selectedId.value) selectedId.value = boards.value[0].id
   }
   catch (e: any) { error.value = e?.message || '請求失敗'; console.error(e) }
@@ -338,6 +241,13 @@ async function loadLeaderboards() {
 
 onMounted(async () => {
   await loadLeaderboards()
+  // 從 LINE 卡片點進來：捲到指定的排行榜
+  if (route.query.board && selectedBoard.value) {
+    loading.value = false
+    await nextTick()
+    document.querySelector('.scroll-row [aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' })
+    document.getElementById('board-detail')?.scrollIntoView({ block: 'start' })
+  }
   loading.value = false
 })
 useRefreshOnAnalysis(loadLeaderboards)

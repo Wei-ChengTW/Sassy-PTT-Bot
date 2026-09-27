@@ -1,53 +1,33 @@
 <template>
-  <div
-    class="rounded-2xl border p-4 flex items-center gap-4 transition-all duration-200
-           hover:shadow-lift active:scale-[0.98] cursor-default select-none relative overflow-hidden"
-    :class="rarityStyle.card"
-  >
-    <!-- Icon / Image -->
-    <div
-      class="shrink-0 w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-inner border border-white/40"
-      :class="rarityStyle.icon"
-    >
-      <img
-        v-if="badge.badge_image_url"
-        :src="badge.badge_image_url"
-        class="w-11 h-11 rounded-full object-cover shadow-sm"
-      />
-      <span v-else>{{ badge.badge_emoji }}</span>
-    </div>
+  <FoilCard :rarity="badge.badge_rarity" :delay="delay"
+            class="rounded-xl border bg-white p-3.5 flex items-center gap-3.5 select-none touch-pan-y" :class="rarityStyle.card">
+    <RaritySeal :rarity="badge.badge_rarity" :emoji="badge.badge_emoji" :image="badge.badge_image_url" :size="56" />
 
-    <!-- Text -->
-    <div class="flex-1 min-w-0">
+    <div class="flex-1 min-w-0 relative z-[3]">
       <p class="font-bold text-sm truncate" :class="rarityStyle.name">
         {{ badge.badge_name }}
       </p>
-      <div class="flex items-center gap-2 mt-1">
-        <span
-          class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-2xs"
-          :class="rarityStyle.pill"
-        >
-          {{ rarityLabel }}
+      <div class="flex items-center gap-2 mt-1.5">
+        <span class="inline-flex items-center px-1.5 py-px rounded text-[11px] font-bold" :class="rarityStyle.pill">
+          {{ rarityStyle.zh }}
         </span>
-        <p v-if="displayDate" class="text-[11px] font-medium" :class="rarityStyle.date">
-          🗓️ {{ displayDate }}
+        <p v-if="displayDate" class="font-num text-xs" :class="rarityStyle.date">
+          {{ displayDate }}
         </p>
       </div>
     </div>
-
-    <!-- Rarity indicator -->
-    <div class="w-2.5 h-2.5 rounded-full shrink-0" :class="rarityStyle.dot" />
-  </div>
+  </FoilCard>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { rarityOf } from '@/constants/rarity'
+import FoilCard from '@/components/FoilCard.vue'
+import RaritySeal from '@/components/RaritySeal.vue'
 
-const props = defineProps<{ badge: any }>()
+const props = withDefaults(defineProps<{ badge: any; delay?: number }>(), { delay: 0.4 })
 
 const rarityStyle = computed(() => rarityOf(props.badge.badge_rarity))
-const rarityLabel = computed(() => `${rarityStyle.value.zh}`)
 const displayDate = computed(() => {
   const ts = props.badge.start_date || props.badge.earned_at
   if (!ts) return ''

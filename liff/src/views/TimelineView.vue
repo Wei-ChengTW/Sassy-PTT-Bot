@@ -1,109 +1,86 @@
 <template>
-  <div class="space-y-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-          <span>🕰️ 回憶時光軸</span>
-        </h1>
-        <p class="text-xs text-slate-400 mt-0.5 font-medium">
-          共 {{ trips.length }} 段群組記憶
-          <span v-if="trips.length"> · {{ oldestYear }}–{{ newestYear }}</span>
-        </p>
-      </div>
-    </div>
+  <div>
+    <PageSign title="回憶時光軸" en="Memories" line="trip">
+      共 <span class="font-num">{{ trips.length }}</span> 段群組記憶
+      <span v-if="trips.length"> · <span class="font-num">{{ oldestYear }}–{{ newestYear }}</span></span>
+    </PageSign>
 
     <!-- 稀有度圖例 -->
-    <div v-if="trips.length" class="flex flex-wrap gap-2">
-      <span
-        v-for="r in legend"
-        :key="r.key"
-        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shadow-2xs"
-        :class="r.pill"
-      >
-        <span>{{ r.emoji }}</span>
-        <span>{{ r.zh }}</span>
-        <span class="opacity-80 font-mono text-[10px] font-bold">({{ counts[r.key] || 0 }})</span>
+    <div v-if="trips.length" class="flex flex-wrap gap-x-3.5 gap-y-1.5 mb-2">
+      <span v-for="r in legend" :key="r.key" class="inline-flex items-center gap-1.5 text-xs text-slate-600">
+        <span class="w-2.5 h-2.5 rounded-full" :style="{ background: r.line }" aria-hidden="true" />
+        {{ r.zh }}
+        <span class="font-num font-semibold text-slate-900">{{ counts[r.key] || 0 }}</span>
       </span>
     </div>
 
     <!-- Skeleton -->
-    <div v-if="loading" class="space-y-3">
-      <div v-for="i in 5" :key="i" class="skeleton h-16 rounded-2xl" />
+    <div v-if="loading" class="space-y-2">
+      <div v-for="i in 5" :key="i" class="skeleton h-14 rounded-xl" />
     </div>
 
     <EmptyState
       v-else-if="error"
-      icon="⚠️"
       title="載入失敗"
       :description="error"
     />
     <EmptyState
       v-else-if="!trips.length"
-      icon="🕰️"
       title="尚無回憶紀錄"
-      description="發起新的群組旅行與活動，解鎖第一段精彩回憶！"
+      description="發起新的群組旅行與活動，解鎖第一段回憶。"
     />
 
-    <div v-else class="space-y-8">
-      <section v-for="group in grouped" :key="group.year">
-        <h2 class="text-xs font-bold font-mono text-brand-700 uppercase tracking-widest mb-3 sticky top-10 bg-slate-50/90 backdrop-blur-md py-1 z-10 px-1">
-          📌 {{ group.year }} 年
+    <div v-else>
+      <section v-for="group in grouped" :key="group.year" class="mt-8 first:mt-6">
+        <!-- 年度章節 -->
+        <h2 class="flex items-end gap-3 mb-3">
+          <span class="font-num text-[40px] leading-none font-semibold text-slate-900">{{ group.year }}</span>
+          <span class="flex-1 foil-rule mb-2" aria-hidden="true" />
+          <span class="text-xs text-slate-500 mb-0.5"><span class="font-num">{{ group.items.length }}</span> 段</span>
         </h2>
-        <div class="relative pl-6">
-          <!-- 縱向時間線 -->
-          <div class="absolute left-[7px] top-2 bottom-2 w-0.5 bg-slate-200/80" />
-          
-          <div v-for="t in group.items" :key="t.id" class="relative mb-3.5 card-rise">
-            <!-- 稀有度圓點 -->
-            <span
-              class="absolute -left-[23px] top-4 w-4 h-4 rounded-full ring-4 ring-white shrink-0 shadow-sm"
-              :class="rarityOf(t.rarity).dot"
-            />
-            
-            <div
-              class="rounded-2xl border p-3.5 flex items-center gap-3 transition-all duration-200"
-              :class="rarityOf(t.rarity).card"
-            >
-              <div class="flex-1 min-w-0">
-                <p class="font-bold text-sm truncate text-slate-800">
-                  {{ t.title }}
-                </p>
-                <p class="text-xs mt-0.5 font-medium" :class="rarityOf(t.rarity).date">
-                  🗓️ {{ formatRange(t) }}
-                </p>
-              </div>
-              <span
-                class="shrink-0 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold"
-                :class="rarityOf(t.rarity).pill"
-              >
-                {{ rarityOf(t.rarity).emoji }} {{ rarityOf(t.rarity).zh }}
-              </span>
-              <button
-                @click.stop="onQuickShare(t.id)"
-                :disabled="sharingId === t.id"
-                class="shrink-0 p-2 rounded-xl text-slate-400 hover:text-brand-600 hover:bg-white/80 active:scale-95 disabled:opacity-40 transition-all btn-press"
-                aria-label="分享這段回憶"
-              >
-                <svg v-if="sharingId !== t.id" class="w-4 h-4" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
-                  <path d="M16 6l-4-4-4 4" />
-                  <path d="M12 2v14" />
-                </svg>
-                <svg v-else class="w-4 h-4 animate-spin text-brand-600" viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" stroke-opacity="0.25" />
-                  <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-                </svg>
-              </button>
+        <ol class="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+          <li v-for="(t, i) in group.items" :key="t.id">
+            <FoilCard :rarity="t.rarity" :delay="0.6 + (i % 5) * 1.1"
+                      class="flex items-center gap-3 pl-3 pr-1.5 py-2.5 touch-pan-y"
+                      :class="t.rarity === 'legendary' ? 'bg-danger-50/50' : t.rarity === 'epic' ? 'bg-accent-50/80' : ''">
+            <RaritySeal :rarity="t.rarity" :emoji="t.custom_emoji || t.badge_emoji" :size="40" />
+            <div class="flex-1 min-w-0">
+              <p class="font-bold text-[15px] truncate text-slate-900">{{ t.title }}</p>
+              <p class="text-xs mt-0.5 text-slate-500"><span class="font-num">{{ formatRange(t) }}</span><template v-if="tripAgo(t)"> · <span class="text-accent-700 font-bold">{{ tripAgo(t) }}</span></template></p>
             </div>
-          </div>
-        </div>
+            <span class="shrink-0 inline-flex items-center px-1.5 py-px rounded text-[11px] font-bold" :class="rarityOf(t.rarity).pill">
+              {{ rarityOf(t.rarity).zh }}
+            </span>
+            <button
+              @click.stop="onQuickShare(t.id)"
+              :disabled="sharingId === t.id"
+              class="shrink-0 w-10 h-10 flex items-center justify-center rounded-md text-slate-500 hover:text-brand-600 hover:bg-slate-50 disabled:opacity-40 btn-press"
+              aria-label="分享這段回憶"
+            >
+              <svg v-if="sharingId !== t.id" class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7" />
+                <path d="M16 6l-4-4-4 4" />
+                <path d="M12 2v14" />
+              </svg>
+              <svg v-else class="w-[18px] h-[18px] animate-spin text-brand-600" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" stroke-opacity="0.25" />
+                <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
+            </FoilCard>
+          </li>
+        </ol>
       </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import PageSign from '@/components/PageSign.vue'
+import RaritySeal from '@/components/RaritySeal.vue'
+import FoilCard from '@/components/FoilCard.vue'
+import { tripAgo } from '@/utils/ago'
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { RARITY, rarityOf } from '@/constants/rarity'
@@ -124,7 +101,7 @@ async function onQuickShare(id: string) {
   try {
     const detail = await api.tripDetail(id)
     const res = await shareFlexMessage(buildTripFlex(detail))
-    if (res.success) toast.success('已分享回顧小卡 🎉')
+    if (res.success) toast.success('已分享回顧小卡')
     else if (res.mode === 'picker') toast.error('已取消分享')
   } catch (e: any) {
     toast.error(e?.message || '分享失敗，請稍後再試')

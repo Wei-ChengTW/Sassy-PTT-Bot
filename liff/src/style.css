@@ -3,128 +3,161 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    background-color: #E4EBE5;
+  }
   body {
-    background-color: #f8fafc;
-    @apply text-slate-800 font-sans antialiased;
+    background-color: #E4EBE5;
+    @apply text-slate-900 font-sans antialiased;
     -webkit-tap-highlight-color: transparent;
+    font-feature-settings: 'palt' 0;
+  }
+  ::selection {
+    background: #B0BEE6;
+    color: #191D1A;
+  }
+  :focus-visible {
+    outline: 2px solid #2346A0;
+    outline-offset: 2px;
+  }
+  input, textarea, select {
+    caret-color: #2346A0;
+  }
+  a {
+    text-underline-offset: 3px;
+  }
+  /* All numerals in the app are tabular so columns line up like a timetable. */
+  .font-mono, .font-num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #C5CAC4 transparent;
   }
 }
 
-/* ── Page transitions ─────────────────────────────────────────── */
+/* ── Cover band (yearbook bookcloth) ──────────────────────────── */
+.sign {
+  background-color: #1E3A2F;
+  /* 布紋：兩組極淡的細線交織 */
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.035) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.08) 0 1px, transparent 1px 3px);
+  color: #fff;
+}
+.sign-en {
+  font-family: 'Barlow Semi Condensed', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #D6B872;
+}
+.foil-rule {
+  height: 1px;
+  background: #B8943A;
+}
+
+/* ── Seat-number chip (rank) ──────────────────────────────────── */
+.station-chip {
+  --line: #2346A0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0 0.25rem;
+  border: 2px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  color: #191D1A;
+  font-family: 'Barlow Semi Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.station-chip--solid {
+  background: var(--line);
+  color: #191D1A;
+}
+
+/* ── Chapter ornament & rule ──────────────────────────────────── */
+.line-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--line, #B8943A);
+  transform: rotate(45deg);
+}
+.line-rail {
+  position: relative;
+}
+.line-rail::before {
+  content: '';
+  position: absolute;
+  left: var(--rail-x, 11px);
+  top: 16px;
+  bottom: 16px;
+  width: 1px;
+  background: #B8943A;
+}
+
+/* ── Page transitions: a short slide along one axis ───────────── */
 .page-enter-active,
 .page-leave-active {
-  transition: opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .page-enter-from {
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateX(12px);
 }
 .page-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateX(-8px);
 }
 
 /* ── More sheet transition ────────────────────────────────────── */
 .more-sheet-enter-active,
 .more-sheet-leave-active {
-  transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .more-sheet-enter-from,
 .more-sheet-leave-to {
   opacity: 0;
-  transform: translateY(12px) scale(0.98);
+  transform: translateY(12px);
 }
 
-/* ── Card Rise Animation & Stagger ───────────────────────────── */
+/* Entrance: content is visible by default; this only settles it in. */
 @keyframes card-rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 .card-rise {
-  animation: card-rise 0.32s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation: card-rise 0.24s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
-
 .stagger > *:nth-child(1) { animation-delay: 0ms; }
-.stagger > *:nth-child(2) { animation-delay: 40ms; }
-.stagger > *:nth-child(3) { animation-delay: 80ms; }
-.stagger > *:nth-child(4) { animation-delay: 120ms; }
-.stagger > *:nth-child(5) { animation-delay: 160ms; }
-.stagger > *:nth-child(6) { animation-delay: 200ms; }
-.stagger > *:nth-child(n+7) { animation-delay: 240ms; }
+.stagger > *:nth-child(2) { animation-delay: 30ms; }
+.stagger > *:nth-child(3) { animation-delay: 60ms; }
+.stagger > *:nth-child(4) { animation-delay: 90ms; }
+.stagger > *:nth-child(n+5) { animation-delay: 120ms; }
 
-/* ── Button Press Interaction ─────────────────────────────────── */
+/* ── Button press ─────────────────────────────────────────────── */
 .btn-press {
-  transition: transform 120ms cubic-bezier(0.4, 0, 0.2, 1), opacity 120ms ease;
+  transition: transform 120ms cubic-bezier(0.4, 0, 0.2, 1), background-color 120ms ease, color 120ms ease;
 }
 .btn-press:active:not(:disabled) {
-  transform: scale(0.95);
+  transform: scale(0.97);
 }
 
-/* ── Skeleton shimmer ─────────────────────────────────────────── */
-@keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
+/* ── Skeleton ─────────────────────────────────────────────────── */
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
 }
-
 .skeleton {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
-  background-size: 800px 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-}
-
-/* ── Legendary Badge Glow Shimmer ────────────────────────────── */
-@keyframes glow-pulse-legendary {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.4), 0 0 10px 2px rgba(244, 63, 94, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 0 4px rgba(244, 63, 94, 0.1), 0 0 20px 6px rgba(244, 63, 94, 0.3);
-  }
-}
-
-.badge-legendary {
-  animation: glow-pulse-legendary 2.6s ease-in-out infinite;
-}
-
-/* ── Epic Badge Glow Pulse ────────────────────────────────────── */
-@keyframes glow-pulse-epic {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4), 0 0 8px 1px rgba(168, 85, 247, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1), 0 0 16px 4px rgba(168, 85, 247, 0.25);
-  }
-}
-
-.badge-epic {
-  animation: glow-pulse-epic 2.6s ease-in-out infinite;
-}
-
-/* ── Legendary Dot Slow Pulse ─────────────────────────────────── */
-@keyframes dot-ping-slow {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.5);
-  }
-  50% {
-    opacity: 0.5;
-    transform: scale(0.88);
-    box-shadow: 0 0 8px 3px rgba(244, 63, 94, 0.35);
-  }
-}
-
-.dot-ping-slow {
-  animation: dot-ping-slow 2.8s ease-in-out infinite;
+  background: #DDE1DC;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
 }
 
 /* ── Reduced motion ───────────────────────────────────────────── */
@@ -135,10 +168,6 @@
     transition-duration: 0.01ms !important;
   }
   .skeleton {
-    animation: none;
-    background: #e2e8f0;
-  }
-  .dot-ping-slow {
     animation: none;
   }
 }
@@ -154,4 +183,224 @@
 
 .safe-area-pb {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ══ Rarity finishes（印刷加工）════════════════════════════════════
+   common 平印 · rare 壓紋 · super_rare 燙綠箔 · epic 燙金 · legendary 鐳射箔
+   參考：simeydotme/pokemon-cards-css 的光源變數做法（--mx/--my 由指標位置驅動）。 */
+@property --foil-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* 紀念章 */
+.seal {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background: #fff padding-box;
+  line-height: 1;
+}
+.seal--common {
+  border-color: #C5CAC4;
+}
+.seal--rare {
+  /* 壓紋：外凸內凹的兩道細環 */
+  border-color: #2346A0;
+  box-shadow:
+    inset 0 0 0 2px #fff,
+    inset 0 0 0 3px rgba(35, 70, 160, 0.35),
+    inset 2px 2px 3px rgba(0, 0, 0, 0.10),
+    inset -2px -2px 3px rgba(255, 255, 255, 0.9),
+    0 1px 1px rgba(0, 0, 0, 0.10);
+}
+.seal--super_rare,
+.seal--epic,
+.seal--legendary {
+  animation: foil-turn var(--foil-speed, 8s) linear infinite;
+}
+.seal--super_rare {
+  --foil-speed: 9s;
+  background:
+    linear-gradient(#fff, #fff) padding-box,
+    conic-gradient(from var(--foil-angle), #1F5736, #A1CCB2, #2E7D4F, #E4F2E9, #18442A, #6DAF87, #1F5736) border-box;
+}
+.seal--epic {
+  --foil-speed: 6s;
+  background:
+    radial-gradient(circle at 35% 30%, #FFFDF6, #FAF5E9 70%) padding-box,
+    conic-gradient(from var(--foil-angle), #6E5618, #F2E6C6, #B8943A, #FFF7DD, #8F7020, #E6D09A, #6E5618) border-box;
+}
+.seal--legendary {
+  --foil-speed: 4s;
+  border-width: 4px;
+  background:
+    radial-gradient(circle at 35% 30%, #fff, #FBEDEB 75%) padding-box,
+    conic-gradient(from var(--foil-angle), #ff9aa2, #ffd48a, #d9f5a0, #8fe3d8, #8fb8ff, #d2a7ff, #ff9aa2) border-box;
+}
+/* 傳說：印章紅外圈 */
+.seal--legendary::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 999px;
+  border: 1.5px solid #B8332A;
+}
+@keyframes foil-turn {
+  to { --foil-angle: 360deg; }
+}
+
+/* 箔面卡片：光澤層 */
+.foil-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  --mx: 50%;
+  --my: 50%;
+  --rx: 0deg;
+  --ry: 0deg;
+  --glare: 0;
+  transform: perspective(700px) rotateX(var(--rx)) rotateY(var(--ry));
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.foil-card.is-active {
+  transition: transform 0.08s linear;
+}
+.foil-card > .foil-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+/* 指標反光 */
+.foil-glare {
+  background: radial-gradient(circle at var(--mx) var(--my), rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0) 45%);
+  mix-blend-mode: soft-light;
+  opacity: var(--glare);
+  transition: opacity 0.3s ease;
+}
+/* 燙金：斜向掠光（定時自動掠過 + 指標驅動） */
+.foil-sheen {
+  background: linear-gradient(115deg,
+    transparent 35%,
+    rgba(230, 208, 154, 0.0) 42%,
+    rgba(255, 240, 200, 0.75) 50%,
+    rgba(230, 208, 154, 0.0) 58%,
+    transparent 65%);
+  background-size: 250% 100%;
+  background-position: var(--sheen-x, 120%) 0;
+  mix-blend-mode: overlay;
+}
+.foil-card:not(.is-active) .foil-sheen {
+  animation: sheen-pass 7s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  animation-delay: var(--sheen-delay, 0.4s);
+}
+@keyframes sheen-pass {
+  0%   { background-position: 120% 0; }
+  18%  { background-position: -20% 0; }
+  100% { background-position: -20% 0; }
+}
+/* 鐳射箔：彩虹全像 + 細紋 */
+.foil-holo {
+  background:
+    repeating-linear-gradient(-45deg,
+      rgba(255, 255, 255, 0) 0 6px,
+      rgba(255, 255, 255, 0.35) 6px 7px),
+    linear-gradient(115deg,
+      #ff9aa2 0%, #ffd48a 16%, #d9f5a0 32%, #8fe3d8 48%, #8fb8ff 64%, #d2a7ff 80%, #ff9aa2 100%);
+  background-size: 100% 100%, 300% 300%;
+  background-position: 0 0, var(--mx) var(--my);
+  mix-blend-mode: color-dodge;
+  opacity: calc(0.18 + var(--glare) * 0.32);
+  transition: opacity 0.3s ease;
+}
+.foil-card:not(.is-active) .foil-holo {
+  animation: holo-drift 9s ease-in-out infinite alternate;
+}
+@keyframes holo-drift {
+  from { background-position: 0 0, 0% 30%; }
+  to   { background-position: 0 0, 100% 70%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seal--super_rare, .seal--epic, .seal--legendary,
+  .foil-card .foil-sheen, .foil-card .foil-holo {
+    animation: none !important;
+  }
+  .foil-card {
+    transform: none !important;
+  }
+}
+
+/* ── 銀箔 / 銅箔獎章卡（第 2、3 名）────────────────────────────── */
+.medal--silver {
+  background: #F1F4F3;
+  border-color: #CDD4D2;
+}
+.medal--bronze {
+  background: #F8EEE4;
+  border-color: #E2C7AC;
+}
+.medal-foil {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background-size: 200% 100%;
+  animation: medal-shine 6s ease-in-out infinite;
+}
+.medal--silver .medal-foil {
+  background-image: linear-gradient(90deg, #9AA4A2, #F4F6F5, #AEB7B5, #E6EAE9, #9AA4A2);
+}
+.medal--bronze .medal-foil {
+  background-image: linear-gradient(90deg, #9A6534, #F0CFAE, #B07A48, #E7BD95, #9A6534);
+  animation-delay: 1.2s;
+}
+@keyframes medal-shine {
+  0%, 100% { background-position: 0% 0; }
+  50%      { background-position: 100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .medal-foil { animation: none; }
+}
+
+/* ── 橫向可滑的標籤列：手機一行可滑（右緣淡出提示還有），寬螢幕直接換行 ── */
+.scroll-row {
+  display: flex;
+  gap: 0.375rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-left: -1rem;
+  margin-right: -1rem;
+  padding-left: 1rem;
+  padding-right: 2.5rem;
+  scroll-padding-inline: 1rem 2.5rem;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+.scroll-row::-webkit-scrollbar {
+  display: none;
+}
+@media (min-width: 640px) {
+  .scroll-row {
+    flex-wrap: wrap;
+    overflow: visible;
+    margin-left: 0;
+    margin-right: 0;
+    padding: 0;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+}
+.medal--gold {
+  background: #FAF5E9;
+  border-color: #E6D09A;
+}
+.medal--gold .medal-foil {
+  background-image: linear-gradient(90deg, #8F7020, #F2E6C6, #B8943A, #FFF7DD, #8F7020);
+  animation-delay: 0.6s;
 }

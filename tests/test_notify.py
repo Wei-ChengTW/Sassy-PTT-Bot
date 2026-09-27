@@ -1,0 +1,46 @@
+"""測試 line_bot/notify.py 的日期判斷（純函式）。"""
+from datetime import date, datetime
+
+from line_bot import notify
+
+
+def _ts(y, m, d, h=12):
+    return int(datetime(y, m, d, h, tzinfo=notify.TZ).timestamp())
+
+
+def test_countdown_days_by_calendar_date():
+    today = date(2026, 9, 28)
+    assert notify.countdown_days(_ts(2026, 10, 5, 1), today) == 7   # 凌晨出發也算 7 天
+    assert notify.countdown_days(_ts(2026, 9, 28, 23), today) == 0
+    assert notify.countdown_days(_ts(2026, 9, 27), today) is None    # 已出發
+    assert notify.countdown_days(None, today) is None
+
+
+def test_trips_due_for_countdown_only_milestones_and_not_ended():
+    today = date(2026, 9, 28)
+    trips = [
+        {"id": "a", "status": "planning", "start_date": _ts(2026, 10, 5)},   # 7 天 ✓
+        {"id": "b", "status": "planning", "start_date": _ts(2026, 10, 6)},   # 8 天 ✗
+        {"id": "c", "status": "ended", "start_date": _ts(2026, 10, 5)},      # 已結束 ✗
+        {"id": "d", "status": "planning", "start_date": _ts(2026, 9, 28)},   # 當天 ✓
+    ]
+    assert [(t["id"], d) for t, d in notify.trips_due_for_countdown(trips, today)] == [("a", 7), ("d", 0)]
+
+
+def test_on_this_day_trips_same_month_day_past_years():
+    today = date(2026, 9, 28)
+    trips = [
+        {"id": "old", "start_date": _ts(2023, 9, 28)},
+        {"id": "last", "start_date": _ts(2025, 9, 28)},
+        {"id": "this_year", "start_date": _ts(2026, 9, 28)},
+        {"id": "other_day", "start_date": _ts(2025, 9, 27)},
+    ]
+    got = notify.on_this_day_trips(trips, today)
+    assert [(t["id"], t["years_ago"]) for t in got] == [("last", 1), ("old", 3)]
+
+
+def test_announce_badges_skips_when_nothing_new(monkeypatch):
+    called = []
+    monkeypatch.setattr(notify, "push_flex", lambda *a: called.append(a) or True)
+    assert notify.announce_badges("t1", []) is False
+    assert called == []

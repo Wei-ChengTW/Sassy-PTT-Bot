@@ -1,53 +1,49 @@
 <template>
-  <div class="space-y-6">
-    <button
-      @click="$router.back()"
-      class="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors inline-flex items-center gap-1 btn-press px-2.5 py-1.5 rounded-xl bg-white border border-slate-200"
-    >
-      <span>← 返回</span>
-    </button>
+  <div>
+    <PageSign :title="detail?.trip.title || '管理旅行'" en="Manage Trip" line="trip" back="返回">
+      <template v-if="detail && !isEditing" #action>
+        <button
+          @click="startEdit"
+          class="text-xs font-bold px-3 py-2 rounded-md bg-white text-cloth hover:bg-slate-100 btn-press inline-flex items-center gap-1"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.9 4.1l3 3L8 19H5v-3L16.9 4.1z" /></svg>
+          編輯資訊
+        </button>
+      </template>
+    </PageSign>
 
     <div v-if="loading" class="space-y-4">
-      <div class="skeleton h-32 rounded-2xl" />
-      <div class="skeleton h-48 rounded-2xl" />
+      <div class="skeleton h-32 rounded-xl" />
+      <div class="skeleton h-48 rounded-xl" />
     </div>
 
-    <div v-else-if="detail" class="space-y-6">
+    <div v-else-if="detail" class="space-y-4">
       <!-- 資訊卡片 -->
-      <BaseCard class="p-5 card-rise">
+      <BaseCard class="p-5">
         <!-- 檢視模式 -->
         <div v-if="!isEditing">
-          <div class="flex items-start justify-between gap-2">
-            <h1 class="text-xl font-bold tracking-tight text-slate-900">{{ detail.trip.title }}</h1>
-            <button
-              @click="startEdit"
-              class="text-xs font-bold text-brand-600 hover:text-brand-700 px-3 py-1.5 bg-brand-50 hover:bg-brand-100 rounded-xl shrink-0 transition-colors btn-press"
-            >
-              ✏️ 編輯資訊
-            </button>
-          </div>
-          <p class="text-slate-500 text-xs font-medium mt-1">📍 {{ detail.trip.location || '無指定地點' }}</p>
+          <p class="text-sm font-bold text-slate-900">{{ detail.trip.location || '無指定地點' }}</p>
           
           <div v-if="detail.trip.trip_types && detail.trip.trip_types.length" class="flex flex-wrap gap-1.5 mt-3">
             <span
               v-for="ty in detail.trip.trip_types"
               :key="ty"
-              class="inline-flex items-center gap-1 rounded-lg bg-brand-50/80 text-brand-700 border border-brand-100 px-2 py-0.5 text-xs font-medium"
+              class="inline-flex items-center rounded border border-slate-300 px-1.5 py-px text-xs text-slate-700"
             >
-              {{ emojiFor(ty) }} {{ labelFor(ty) }}
+              {{ labelFor(ty) }}
             </span>
           </div>
 
           <div class="flex items-center gap-2 text-xs mt-3 pt-3 border-t border-slate-100">
             <span class="font-medium text-slate-600">
               狀態：
-              <span :class="{ ended: 'text-slate-400', upcoming: 'text-amber-600 font-bold', ongoing: 'text-brand-600 font-bold' }[tripPhase(detail.trip)]">
-                {{ { ended: '已結束', upcoming: '規劃中 🗓️', ongoing: '進行中 🔥' }[tripPhase(detail.trip)] }}
+              <span :class="{ ended: 'text-slate-500', upcoming: 'text-accent-700 font-bold', ongoing: 'text-success-700 font-bold' }[tripPhase(detail.trip)]">
+                {{ { ended: '已結束', upcoming: '規劃中', ongoing: '進行中' }[tripPhase(detail.trip)] }}
               </span>
             </span>
             <span
               v-if="detail.trip.rarity"
-              class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold shadow-2xs"
+              class="inline-flex items-center gap-1 px-1.5 py-px rounded font-bold"
               :class="rarity.pill"
             >
               {{ rarity.zh }}
@@ -59,28 +55,28 @@
         <div v-else class="space-y-4">
           <div class="flex gap-3 items-start">
             <div class="w-18 shrink-0">
-              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Emoji</label>
+              <label class="block text-[13px] font-bold text-slate-700 mb-1.5">Emoji</label>
               <input
                 v-model="editForm.custom_emoji"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-center text-xl focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white"
+                class="w-full bg-white border border-slate-300 rounded-md px-2 py-2 text-center text-xl focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                 placeholder="🎒"
               />
             </div>
             <div class="flex-1 min-w-0">
-              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">旅行名稱 *</label>
+              <label class="block text-[13px] font-bold text-slate-700 mb-1.5">旅行名稱 *</label>
               <input
                 v-model="editForm.title"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white"
+                class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                 placeholder="例如：墾丁三日遊"
               />
             </div>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">地點</label>
+            <label class="block text-[13px] font-bold text-slate-700 mb-1.5">地點</label>
             <input
               v-model="editForm.location"
-              class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white"
+              class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
               placeholder="例如：墾丁"
             />
           </div>
@@ -88,60 +84,61 @@
           <!-- 日期編輯 -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">開始日期 *</label>
+              <label class="block text-[13px] font-bold text-slate-700 mb-1.5">開始日期 *</label>
               <input
                 v-model="editForm.startDate"
                 type="date"
                 required
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white"
+                class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
               />
             </div>
             <div>
-              <label class="flex items-center gap-1 text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+              <label class="flex items-center gap-1 text-[13px] font-bold text-slate-700 mb-1.5">
                 結束日期
-                <span class="text-[10px] text-slate-400 font-normal">（留空=當天）</span>
+                <span class="text-[11px] text-slate-500 font-normal">（留空=當天）</span>
               </label>
               <input
                 v-model="editForm.endDate"
                 type="date"
                 :min="editForm.startDate || undefined"
-                class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-400 focus:bg-white"
+                class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm font-medium focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
               />
             </div>
           </div>
 
-          <div v-if="tripKindLabel" class="text-xs text-slate-400">
+          <div v-if="tripKindLabel" class="text-xs text-slate-500">
             目前分類：<span :class="tripKindLabel.color">{{ tripKindLabel.text }}</span>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">類型標籤（可複選）</label>
+            <label class="block text-[13px] font-bold text-slate-700 mb-2">類型標籤（可複選）</label>
             <div class="flex flex-wrap gap-1.5">
               <button
                 v-for="t in TRIP_TYPES"
                 :key="t.value"
                 type="button"
                 @click="toggleType(t.value)"
-                class="rounded-full px-3 py-1.5 text-xs font-semibold border transition-all duration-150 btn-press"
-                :class="editForm.types.includes(t.value)
-                  ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+                class="rounded-md px-3 py-1.5 text-xs font-medium border transition-all duration-150 btn-press"
+                :class="editForm.types.includes(t.value) ? 'bg-cloth text-white border-cloth'
+                  : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'"
               >
-                {{ t.emoji }} {{ t.label }}
+                {{ t.label }}
               </button>
             </div>
           </div>
 
           <div>
-            <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">稀有度等級</label>
+            <label class="block text-[13px] font-bold text-slate-700 mb-2">稀有度等級</label>
             <div class="grid grid-cols-5 gap-1.5">
               <button
                 v-for="r in rarityOptions"
                 :key="r.key"
                 type="button"
                 @click="editForm.rarity = r.key"
-                class="py-1.5 text-xs rounded-xl border font-bold transition-all btn-press"
-                :class="editForm.rarity === r.key ? `${r.pill} border-current shadow-sm` : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'"
+                class="py-1.5 text-xs rounded-md border-2 font-bold transition-colors"
+                :class="editForm.rarity === r.key ? 'bg-slate-900 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'"
+                :style="{ borderColor: r.line }"
+                :aria-pressed="editForm.rarity === r.key"
               >
                 {{ r.zh }}
               </button>
@@ -152,13 +149,13 @@
             <button
               @click="saveEdit"
               :disabled="saving || !editForm.title.trim()"
-              class="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-xs py-2.5 rounded-xl font-bold disabled:opacity-50 transition-all btn-press shadow-sm"
+              class="flex-1 bg-brand-500 hover:bg-brand-600 text-white text-sm py-2.5 rounded-md font-bold disabled:opacity-60 btn-press"
             >
               {{ saving ? '儲存中...' : '儲存變更' }}
             </button>
             <button
               @click="isEditing = false"
-              class="px-4 py-2.5 border border-slate-200 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-50 transition-all btn-press"
+              class="px-4 py-2.5 border border-slate-300 text-sm font-medium rounded-md text-slate-700 hover:bg-slate-50 btn-press"
             >
               取消
             </button>
@@ -167,31 +164,30 @@
       </BaseCard>
 
       <!-- 參與人勾選卡片 -->
-      <BaseCard class="p-5 card-rise">
+      <BaseCard class="p-5">
         <SectionHeader
           title="參與人員名單"
-          icon="👥"
           :subtitle="`已選 ${selected.size} 人`"
           class="!mt-0 !mb-3"
         />
 
-        <div v-if="membersLoading" class="text-xs text-slate-400 py-3">載入群組成員中...</div>
+        <div v-if="membersLoading" class="text-xs text-slate-500 py-3">載入群組成員中...</div>
         <div v-else class="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto no-scrollbar pr-1">
           <label
             v-for="m in members"
             :key="m.user_id"
-            class="flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium cursor-pointer select-none transition-all duration-150"
-            :class="selected.has(m.user_id) ? 'border-brand-300 bg-brand-50/80 text-brand-900 font-semibold' : 'border-slate-200 hover:bg-slate-50 text-slate-700'"
+            class="flex items-center gap-2 rounded-md border px-3 py-2.5 text-[13px] cursor-pointer select-none transition-colors"
+            :class="selected.has(m.user_id) ? 'border-brand-500 bg-brand-50 text-slate-900 font-bold' : 'border-slate-200 hover:bg-slate-50 text-slate-700'"
           >
             <input
               type="checkbox"
               :checked="selected.has(m.user_id)"
               @change="toggle(m.user_id)"
-              class="accent-brand-600 rounded"
+              class="accent-brand-500 w-4 h-4"
             />
-            <span class="truncate" :class="m.resolved ? '' : 'text-slate-400'">
+            <span class="truncate" :class="m.resolved ? '' : 'text-slate-500'">
               {{ m.display_name }}
-              <span v-if="!m.resolved" class="text-[10px]">（待接回）</span>
+              <span v-if="!m.resolved" class="text-[11px]">（待接回）</span>
             </span>
           </label>
         </div>
@@ -200,25 +196,25 @@
           v-if="detail.trip.status !== 'ended'"
           @click="saveParticipants"
           :disabled="actionLoading"
-          class="mt-4 w-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 rounded-xl py-3 text-sm font-semibold disabled:opacity-50 transition-all btn-press"
+          class="mt-4 w-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-900 rounded-md py-3 text-sm font-bold disabled:opacity-60 btn-press"
         >
-          💾 僅儲存名單（活動繼續進行）
+          僅儲存名單（活動繼續進行）
         </button>
         <button
           v-if="detail.trip.status !== 'ended'"
           @click="saveAndAward"
           :disabled="actionLoading || selected.size === 0"
-          class="mt-2.5 w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl py-3 text-sm font-bold shadow-md shadow-purple-500/20 disabled:opacity-50 transition-all btn-press"
+          class="mt-2 w-full bg-brand-500 hover:bg-brand-600 text-white rounded-md py-3 text-sm font-bold disabled:opacity-60 btn-press"
         >
-          💾 儲存名單並結束活動、發放徽章
+          儲存名單並結束活動、發放徽章
         </button>
         <button
           v-else
           @click="saveParticipants"
           :disabled="actionLoading"
-          class="mt-4 w-full bg-slate-800 hover:bg-slate-900 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-50 transition-all btn-press"
+          class="mt-4 w-full bg-brand-500 hover:bg-brand-600 text-white rounded-md py-3 text-sm font-bold disabled:opacity-60 btn-press"
         >
-          💾 更新參與名單
+          更新參與名單
         </button>
       </BaseCard>
 
@@ -228,27 +224,29 @@
           v-if="detail.trip.status !== 'ended'"
           @click="endTrip"
           :disabled="actionLoading"
-          class="w-full bg-accent-500 hover:bg-accent-600 text-white rounded-xl py-3 text-sm font-bold shadow-sm disabled:opacity-50 transition-all btn-press"
+          class="w-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-900 rounded-md py-3 text-sm font-bold disabled:opacity-60 btn-press"
         >
-          🏁 僅結束旅行（不發徽章）
+          僅結束旅行（不發徽章）
         </button>
         <button
           v-if="detail.trip.status === 'ended'"
           @click="awardBadges"
           :disabled="actionLoading"
-          class="w-full border border-purple-300 text-purple-700 hover:bg-purple-50 rounded-xl py-3 text-sm font-bold disabled:opacity-50 transition-all btn-press"
+          class="w-full border border-slate-300 bg-white hover:bg-slate-50 text-slate-900 rounded-md py-3 text-sm font-bold disabled:opacity-60 btn-press"
         >
-          🏅 重新發放徽章
+          重新發放徽章
         </button>
       </div>
 
-      <p v-if="message" class="text-center mt-3 text-xs font-bold text-success-600">{{ message }}</p>
-      <p v-if="error" class="text-center mt-3 text-xs font-bold text-danger-600">{{ error }}</p>
+      <p v-if="message" class="text-center mt-3 text-sm font-bold text-success-700" role="status">{{ message }}</p>
+      <p v-if="error" class="text-center mt-3 text-sm font-bold text-danger-600" role="alert">{{ error }}</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import PageSign from '@/components/PageSign.vue'
+import { RARITY } from '@/constants/rarity'
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { api } from '@/api/client'
@@ -287,17 +285,11 @@ const tripKindLabel = computed(() => {
   const sd = editForm.value.startDate
   const ed = editForm.value.endDate
   if (!sd) return null
-  if (ed && ed !== sd) return { text: '多日旅行 🧳', color: 'text-brand-600 font-bold' }
-  return { text: '當天事件 ⚡', color: 'text-accent-600 font-bold' }
+  if (ed && ed !== sd) return { text: '多日旅行', color: 'text-slate-900 font-bold' }
+  return { text: '當天事件', color: 'text-slate-900 font-bold' }
 })
 
-const rarityOptions = [
-  { key: 'common', zh: '普通', pill: 'bg-slate-100 text-slate-700' },
-  { key: 'rare', zh: '稀有', pill: 'bg-sky-100 text-sky-700' },
-  { key: 'super_rare', zh: '極稀有', pill: 'bg-accent-100 text-accent-700' },
-  { key: 'epic', zh: '史詩', pill: 'bg-purple-100 text-purple-700' },
-  { key: 'legendary', zh: '傳說', pill: 'bg-rose-100 text-rose-700' },
-]
+const rarityOptions = Object.values(RARITY).map(r => ({ key: r.key, zh: r.zh, line: r.line }))
 
 function toDateInput(ts: number | null | undefined) {
   if (!ts) return ''
@@ -348,7 +340,7 @@ async function saveEdit() {
     })
     await load()
     isEditing.value = false
-    message.value = '旅行資訊修改成功 🎉'
+    message.value = '旅行資訊修改成功'
   } catch (e: any) {
     error.value = e.message || '修改失敗'
   } finally {

@@ -17,6 +17,7 @@ const router = createRouter({
     { path: '/topics', component: () => import('@/views/TopicsView.vue'), meta: { requiresParticipant: true } },
     { path: '/map', component: () => import('@/views/MapView.vue'), meta: { requiresParticipant: true } },
     { path: '/profile', component: () => import('@/views/ProfileView.vue'), meta: { requiresParticipant: true } },
+    { path: '/profile/:userId', component: () => import('@/views/ProfileView.vue'), meta: { requiresParticipant: true } },
     { path: '/pulse', component: () => import('@/views/GroupPulseView.vue'), meta: { requiresParticipant: true } },
     { path: '/compare', component: () => import('@/views/CompareView.vue'), meta: { requiresParticipant: true } },
     { path: '/nicknames', component: () => import('@/views/NicknamesView.vue'), meta: { requiresParticipant: true } },

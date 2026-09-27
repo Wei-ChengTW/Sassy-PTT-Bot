@@ -1,30 +1,29 @@
 <template>
-  <div class="space-y-6">
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-          <span>📊 群組儀表板</span>
-        </h1>
-        <p v-if="data?.group_name" class="text-xs font-semibold text-brand-600 mt-0.5">
-          {{ data.group_name }}
-        </p>
-      </div>
-    </div>
+  <div>
+    <PageSign :title="data?.group_name || '群組儀表板'" en="Class Record">
+      <template v-if="data?.group_name">群組儀表板</template>
+      <template v-if="data" #figures>
+        <div class="grid grid-cols-2 gap-px bg-white/15 border border-white/15 rounded-md overflow-hidden">
+          <StatCard tone="cover" label="總訊息量" :value="data.summary.total_messages" />
+          <StatCard tone="cover" label="群組成員" :value="data.summary.member_count" />
+          <StatCard tone="cover" label="預計進行的行程" :value="data.summary.active_trips" />
+          <StatCard tone="cover" label="活躍天數" :value="data.summary.active_days" />
+        </div>
+      </template>
+    </PageSign>
 
     <!-- Skeleton Loading -->
     <div v-if="loading" class="space-y-6">
-      <div class="grid grid-cols-2 gap-3">
-        <div v-for="i in 4" :key="i" class="bg-white rounded-2xl p-4 border border-slate-100">
-          <div class="skeleton h-4 w-14 rounded-full mb-3" />
-          <div class="skeleton h-8 w-24 rounded-lg" />
+      <div class="grid grid-cols-2 gap-px bg-slate-200 border border-slate-200 rounded-xl overflow-hidden">
+        <div v-for="i in 4" :key="i" class="bg-white px-4 py-3.5">
+          <div class="skeleton h-7 w-20 rounded mb-2" />
+          <div class="skeleton h-3 w-14 rounded" />
         </div>
       </div>
-      <div class="skeleton h-4 w-28 rounded-full" />
-      <div class="bg-white rounded-2xl border border-slate-100 p-4 divide-y divide-slate-100">
+      <div class="bg-white rounded-xl border border-slate-200 px-4 divide-y divide-slate-100">
         <div v-for="i in 5" :key="i" class="flex items-center py-3 gap-3">
-          <div class="skeleton w-6 h-4 rounded" />
-          <div class="skeleton flex-1 h-4 rounded-full" />
+          <div class="skeleton w-7 h-7 rounded-md" />
+          <div class="skeleton flex-1 h-4 rounded" />
           <div class="skeleton w-12 h-4 rounded" />
         </div>
       </div>
@@ -33,56 +32,51 @@
     <!-- Error State -->
     <EmptyState
       v-else-if="error"
-      icon="⚠️"
       title="無法載入資料"
       :description="error"
     />
 
     <!-- Main Content -->
-    <div v-else-if="data" class="space-y-6">
-      <!-- Stat cards with Stagger Animation -->
-      <div class="grid grid-cols-2 gap-3 stagger">
-        <StatCard
-          class="card-rise"
-          label="總訊息量"
-          :value="data.summary.total_messages"
-          icon="💬"
-          variant="brand"
-        />
-        <StatCard
-          class="card-rise"
-          label="群組成員"
-          :value="data.summary.member_count"
-          icon="👥"
-          variant="success"
-        />
-        <StatCard
-          class="card-rise"
-          label="進行中旅行"
-          :value="data.summary.active_trips"
-          icon="🎒"
-          variant="purple"
-        />
-        <StatCard
-          class="card-rise"
-          label="活躍天數"
-          :value="data.summary.active_days"
-          icon="🔥"
-          variant="accent"
-        />
-      </div>
+    <div v-else-if="data">
+      <!-- 到站看板：Top 話癆 -->
+      <SectionHeader title="Top 話癆榜" class="!mt-0">
+        <template #action>
+          <router-link to="/leaderboard" class="text-xs font-medium text-brand-600 py-1">完整排行 →</router-link>
+        </template>
+      </SectionHeader>
+      <BaseCard class="overflow-hidden">
+        <ol class="divide-y divide-slate-100">
+          <li
+            v-for="(u, i) in data.top_users.slice(0, 5)"
+            :key="u.user_id"
+            class="flex items-center px-3.5 py-3 gap-3"
+            :class="topRanks[i] === 1 ? 'bg-accent-50' : ''"
+          >
+            <RankChip :rank="topRanks[i]" />
+            <div class="flex-1 min-w-0">
+              <p class="text-[15px] font-bold text-slate-900 truncate">{{ u.user_name || u.user_id }}</p>
+              <p v-if="data.summary.total_messages" class="text-xs text-slate-500 mt-0.5">
+                佔全群 <span class="font-num text-slate-700">{{ (u.total / data.summary.total_messages * 100).toFixed(1) }}%</span>
+              </p>
+            </div>
+            <span class="font-num text-lg font-semibold text-slate-900">
+              {{ u.total.toLocaleString() }}<span class="font-sans text-xs font-normal text-slate-500 ml-1">則</span>
+            </span>
+          </li>
+        </ol>
+      </BaseCard>
 
       <!-- 群組健康度 -->
       <template v-if="data.health">
         <div>
-          <SectionHeader title="群組健康指數" icon="💓" />
-          <BaseCard class="p-4 card-rise">
+          <SectionHeader title="群組健康指數" />
+          <BaseCard class="p-4">
             <div class="flex items-center gap-4">
-              <div class="text-center shrink-0 pl-2">
-                <p class="text-4xl font-black tabular-nums font-mono text-brand-600 leading-none">
-                  {{ data.health.overall }}
+              <div class="shrink-0 pl-1">
+                <p class="font-num text-[44px] font-semibold text-slate-900 leading-none">
+                  {{ data.health.overall }}<span class="text-base text-slate-500 font-medium">/100</span>
                 </p>
-                <p class="text-[11px] font-semibold text-slate-400 mt-1 uppercase tracking-wider">/ 100 分</p>
+                <p class="text-xs text-slate-500 mt-1.5">綜合分數</p>
               </div>
               <div class="flex-1 min-w-0" style="max-height:180px">
                 <Radar :data="healthRadarData" :options="healthRadarOptions" style="max-height:180px" />
@@ -90,7 +84,7 @@
             </div>
             <ul v-if="data.health.suggestions?.length" class="mt-4 pt-3 border-t border-slate-100 space-y-1.5">
               <li v-for="s in data.health.suggestions" :key="s" class="text-xs text-slate-600 flex items-start gap-2">
-                <span class="text-brand-500 font-bold shrink-0">💡</span>
+                <span class="w-1.5 h-1.5 mt-1.5 rounded-full bg-brand-500 shrink-0" aria-hidden="true" />
                 <span>{{ s }}</span>
               </li>
             </ul>
@@ -101,8 +95,8 @@
       <!-- 活躍時段熱力圖 -->
       <template v-if="data.heatmap && data.heatmap.length">
         <div>
-          <SectionHeader title="群組活躍時段分佈" icon="🕒" />
-          <BaseCard class="p-4 card-rise">
+          <SectionHeader title="群組活躍時段分佈" />
+          <BaseCard class="p-4">
             <HeatmapChart :data="data.heatmap" :date-data="data.recent_date_heatmap" />
           </BaseCard>
         </div>
@@ -111,21 +105,15 @@
       <!-- 每週趨勢對比 -->
       <template v-if="weekly && weekly.weeks.length">
         <div>
-          <SectionHeader title="每週發言趨勢" icon="📈" />
-          <BaseCard class="p-4 card-rise">
+          <SectionHeader title="每週發言趨勢" />
+          <BaseCard class="p-4">
             <div class="flex items-baseline gap-2 mb-3">
-              <span class="text-2xl font-bold tabular-nums font-mono text-slate-800">
+              <span class="font-num text-[28px] font-semibold text-slate-900 leading-none">
                 {{ weekly.this_week.toLocaleString() }}
               </span>
-              <span class="text-xs text-slate-400 font-medium">本週</span>
-              <span
-                v-if="weekly.growth_percent !== null"
-                class="text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-0.5"
-                :class="weekly.growth_percent >= 0 ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-700'"
-              >
-                {{ weekly.growth_percent >= 0 ? '↑' : '↓' }} {{ Math.abs(weekly.growth_percent) }}%
-              </span>
-              <span class="text-xs text-slate-400 ml-auto tabular-nums font-medium">
+              <span class="text-xs text-slate-500">本週至今</span>
+              <span class="text-xs text-slate-500">· 進行中，第 <span class="font-num">{{ weekDay }}</span> 天</span>
+              <span class="text-xs text-slate-500 ml-auto">
                 上週 {{ weekly.last_week.toLocaleString() }}
               </span>
             </div>
@@ -137,15 +125,15 @@
       <!-- 月成長趨勢 -->
       <template v-if="data.monthly_trend && data.monthly_trend.length">
         <div>
-          <SectionHeader title="月份成長軌跡" icon="📊" />
-          <BaseCard class="p-4 card-rise">
+          <SectionHeader title="月份成長軌跡" />
+          <BaseCard class="p-4">
             <Line :data="monthlyLineData" :options="monthlyOptions" style="max-height:180px" />
           </BaseCard>
           <div v-if="latestGrowth !== null" class="mt-2 text-xs text-slate-500 px-1 flex items-center justify-between">
             <span>最近一個月相對前月：</span>
             <span
-              class="font-bold px-2 py-0.5 rounded-full"
-              :class="latestGrowth >= 0 ? 'bg-success-50 text-success-700' : 'bg-danger-50 text-danger-700'"
+              class="font-num text-sm font-semibold"
+              :class="latestGrowth >= 0 ? 'text-success-600' : 'text-danger-600'"
             >
               {{ latestGrowth >= 0 ? '成長 ↑' : '減少 ↓' }} {{ Math.abs(latestGrowth) }}%
             </span>
@@ -156,8 +144,8 @@
       <!-- 季節性 -->
       <template v-if="data.seasonality && data.seasonality.length">
         <div>
-          <SectionHeader title="季節月份合計" icon="🍂" />
-          <BaseCard class="p-4 card-rise">
+          <SectionHeader title="季節月份合計" />
+          <BaseCard class="p-4">
             <Bar :data="seasonBarData" :options="seasonOptions" style="max-height:160px" />
           </BaseCard>
         </div>
@@ -166,63 +154,33 @@
       <!-- 旅行類型分佈 -->
       <template v-if="data.trip_type_distribution && data.trip_type_distribution.length">
         <div>
-          <SectionHeader title="旅行類型分佈" icon="🏕️" />
-          <BaseCard class="p-4 flex flex-wrap gap-2 card-rise">
+          <SectionHeader title="旅行類型分佈" />
+          <BaseCard class="p-4 flex flex-wrap gap-2">
             <span
               v-for="d in data.trip_type_distribution"
               :key="d.type"
-              class="inline-flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-200/80 px-3 py-1.5 text-xs text-slate-700 font-medium"
+              class="inline-flex items-center gap-1.5 rounded-md border border-trip-500 px-2.5 py-1 text-xs text-slate-800"
             >
-              <span>{{ emojiFor(d.type) }}</span>
               <span>{{ labelFor(d.type) }}</span>
-              <span class="text-slate-400 font-mono text-[11px]">×{{ d.count }}</span>
+              <span class="font-num text-trip-700 font-semibold">{{ d.count }}</span>
             </span>
           </BaseCard>
         </div>
       </template>
 
-      <!-- Top users -->
-      <div>
-        <SectionHeader title="Top 話癆榜" icon="🏆" />
-        <BaseCard class="overflow-hidden card-rise">
-          <div class="divide-y divide-slate-100">
-            <div
-              v-for="(u, i) in data.top_users.slice(0, 5)"
-              :key="u.user_id"
-              class="flex items-center px-4 py-3.5 gap-3 transition-colors hover:bg-slate-50/80"
-              :class="topRanks[i] === 1 ? 'bg-accent-50/40' : ''"
-            >
-              <span
-                class="text-sm w-6 text-center font-bold tabular-nums"
-                :class="topRanks[i] === 1 ? 'text-accent-600' : topRanks[i] === 2 ? 'text-slate-400' : topRanks[i] === 3 ? 'text-amber-700' : 'text-slate-300 font-normal'"
-              >
-                {{ medal(topRanks[i]) }}
-              </span>
-              <span class="flex-1 text-sm font-semibold text-slate-800 truncate">
-                {{ u.user_name || u.user_id }}
-              </span>
-              <span class="text-sm font-bold font-mono tabular-nums text-slate-700">
-                {{ u.total.toLocaleString() }}
-                <span class="text-xs font-normal text-slate-400 ml-0.5">則</span>
-              </span>
-            </div>
-          </div>
-        </BaseCard>
-      </div>
-
       <!-- Message type breakdown -->
       <div>
-        <SectionHeader title="訊息類型分佈" icon="🧩" />
-        <BaseCard class="overflow-hidden card-rise">
+        <SectionHeader title="訊息類型分佈" />
+        <BaseCard class="overflow-hidden">
           <div class="divide-y divide-slate-100">
             <div
               v-for="t in data.type_distribution"
               :key="t.type"
               class="flex items-center px-4 py-3 gap-3"
             >
-              <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ background: TYPE_COLORS[t.type] || '#94a3b8' }" />
-              <span class="flex-1 text-sm font-medium text-slate-700 capitalize">{{ t.type }}</span>
-              <span class="text-sm font-semibold font-mono tabular-nums text-slate-600">
+              <span class="w-2.5 h-2.5 rounded-full shrink-0" :style="{ background: TYPE_COLORS[t.type] || '#8C938C' }" />
+              <span class="flex-1 text-sm text-slate-800">{{ TYPE_LABELS[t.type] || t.type }}</span>
+              <span class="font-num text-[15px] font-semibold text-slate-900">
                 {{ t.count.toLocaleString() }}
               </span>
             </div>
@@ -241,15 +199,17 @@ import {
   BarElement, PointElement, LineElement, Tooltip, Legend, Filler,
 } from 'chart.js'
 import { api } from '@/api/client'
-import { competitionRanks, medal } from '@/utils/rank'
+import { competitionRanks } from '@/utils/rank'
 import { useRefreshOnAnalysis } from '@/composables/useRefreshOnAnalysis'
-import { emojiFor, labelFor } from '@/constants/tripTypes'
-import { TYPE_COLORS } from '@/constants/chartColors'
+import { labelFor } from '@/constants/tripTypes'
+import { TYPE_COLORS, TYPE_LABELS, CHART_INK, CHART_INK_FILL, CHART_FOIL, peakColors } from '@/constants/chartColors'
 import HeatmapChart from '@/components/HeatmapChart.vue'
 import BaseCard from '@/components/BaseCard.vue'
 import StatCard from '@/components/StatCard.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import SectionHeader from '@/components/SectionHeader.vue'
+import PageSign from '@/components/PageSign.vue'
+import RankChip from '@/components/RankChip.vue'
 
 ChartJS.register(CategoryScale, LinearScale, RadialLinearScale, BarElement, PointElement, LineElement, Tooltip, Legend, Filler)
 
@@ -269,13 +229,18 @@ const monthlyLineData = computed(() => {
     datasets: [{
       label: '訊息數',
       data: rows.map((r: any) => r.count),
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99,102,241,0.12)',
+      borderColor: CHART_INK,
+      backgroundColor: CHART_INK_FILL,
       fill: true,
-      tension: 0.35,
-      borderWidth: 2.5,
-      pointRadius: 3,
-      pointBackgroundColor: '#6366f1',
+      tension: 0,
+      borderWidth: 2,
+      // 只在最高的月份放一顆金點
+      pointRadius: peakPoint(rows.map((r: any) => r.count), 5),
+      pointBackgroundColor: CHART_FOIL,
+      pointBorderColor: '#fff',
+      pointBorderWidth: 2,
+      pointHoverRadius: 4,
+      pointHoverBackgroundColor: CHART_INK,
     }],
   }
 })
@@ -285,7 +250,7 @@ const monthlyOptions = {
   plugins: { legend: { display: false } },
   scales: {
     x: { grid: { display: false } },
-    y: { grid: { color: 'rgba(226,232,240,0.6)' } },
+    y: { grid: { color: '#EEF0ED' } },
   },
 }
 
@@ -303,8 +268,8 @@ const seasonBarData = computed(() => {
     labels: MONTH_LABELS,
     datasets: [{
       data: MONTH_LABELS.map((_, i) => map[i + 1] || 0),
-      backgroundColor: '#818cf8',
-      borderRadius: 6,
+      backgroundColor: peakColors(MONTH_LABELS.map((_, i) => map[i + 1] || 0)),
+      borderRadius: 2,
     }],
   }
 })
@@ -313,8 +278,8 @@ const seasonOptions = {
   responsive: true,
   plugins: { legend: { display: false } },
   scales: {
-    x: { grid: { display: false } },
-    y: { grid: { color: 'rgba(226,232,240,0.6)' } },
+    x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, font: { size: 10 } } },
+    y: { grid: { color: '#EEF0ED' } },
   },
 }
 
@@ -331,12 +296,12 @@ const healthRadarData = computed(() => {
     labels: keys.map((k) => HEALTH_LABELS[k]),
     datasets: [{
       data: keys.map((k) => h[k]),
-      borderColor: '#6366f1',
-      backgroundColor: 'rgba(99,102,241,0.2)',
-      pointBackgroundColor: '#6366f1',
+      borderColor: CHART_INK,
+      backgroundColor: 'rgba(30,58,47,0.10)',
+      pointBackgroundColor: CHART_INK,
       pointBorderColor: '#fff',
       pointHoverBackgroundColor: '#fff',
-      pointHoverBorderColor: '#6366f1',
+      pointHoverBorderColor: CHART_INK,
       borderWidth: 2,
     }],
   }
@@ -350,25 +315,48 @@ const healthRadarOptions = {
       min: 0,
       max: 100,
       ticks: { stepSize: 25, display: false },
-      grid: { color: 'rgba(226,232,240,0.8)' },
-      angleLines: { color: 'rgba(226,232,240,0.8)' },
-      pointLabels: { font: { size: 11, weight: 'bold' as const, family: 'Inter, Noto Sans TC' }, color: '#64748b' },
+      grid: { color: '#EEF0ED' },
+      angleLines: { color: '#EEF0ED' },
+      pointLabels: { font: { size: 11, family: '"Noto Sans TC", sans-serif' }, color: '#646B65' },
     },
   },
 }
 
 const weekly = computed(() => data.value?.weekly_trend || null)
 
+// 已完成各週中最高的那一週（本週未完成，不參與比較）
+const pastPeak = computed(() => {
+  const weeks = weekly.value?.weeks || []
+  const past = weeks.slice(0, -1).map((r: any) => r.count)
+  return past.length ? past.indexOf(Math.max(...past)) : -1
+})
+
+// 本週第幾天（週一為第 1 天）
+const weekDay = ((new Date().getDay() + 6) % 7) + 1
+
+function peakPoint(values: number[], r: number) {
+  const max = Math.max(...values)
+  return values.map(v => (v === max && max > 0 ? r : 0))
+}
+
 const weeklyBarData = computed(() => {
   const w = weekly.value
   if (!w) return { labels: [], datasets: [] }
   return {
-    labels: w.weeks.map((r: any) => r.week.split('-')[1] ? `W${r.week.split('-')[1]}` : r.week),
+    labels: w.weeks.map((r: any, i: number) => {
+      const label = r.week.split('-')[1] ? `W${r.week.split('-')[1]}` : r.week
+      return i === w.weeks.length - 1 ? [label, '進行中'] : label
+    }),
     datasets: [{
       data: w.weeks.map((r: any) => r.count),
-      backgroundColor: w.weeks.map((_: any, i: number) =>
-        i === w.weeks.length - 1 ? '#6366f1' : '#c7d2fe'),
-      borderRadius: 6,
+      // 已完成的週：深綠，最高那週燙金；本週（未完成）：淡綠外框
+      backgroundColor: w.weeks.map((_: any, i: number) => {
+        if (i === w.weeks.length - 1) return 'rgba(30,58,47,0.08)'
+        return pastPeak.value === i ? CHART_FOIL : CHART_INK
+      }),
+      borderColor: w.weeks.map((_: any, i: number) => (i === w.weeks.length - 1 ? CHART_INK : 'transparent')),
+      borderWidth: 1.5,
+      borderRadius: 2,
     }],
   }
 })
@@ -377,8 +365,8 @@ const weeklyOptions = {
   responsive: true,
   plugins: { legend: { display: false } },
   scales: {
-    x: { grid: { display: false } },
-    y: { grid: { color: 'rgba(226,232,240,0.6)' } },
+    x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, font: { size: 10 } } },
+    y: { grid: { color: '#EEF0ED' } },
   },
 }
 

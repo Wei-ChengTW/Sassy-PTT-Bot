@@ -1,9 +1,9 @@
 <template>
   <div
-    class="rounded-2xl transition-all duration-200"
+    class="rounded-xl border"
     :class="[
       variantClasses,
-      interactive ? 'btn-press cursor-pointer hover:shadow-lift' : '',
+      interactive ? 'btn-press cursor-pointer hover:border-slate-300' : '',
     ]"
   >
     <slot />
@@ -27,14 +27,13 @@ const props = withDefaults(
 const variantClasses = computed(() => {
   switch (props.variant) {
     case 'brand':
-      return 'bg-gradient-to-br from-brand-50 to-white border border-brand-100 shadow-card'
+      return 'bg-brand-50 border-brand-100'
     case 'subtle':
-      return 'bg-slate-50 border border-slate-200/70 shadow-none'
+      return 'bg-slate-50 border-slate-200'
     case 'elevated':
-      return 'bg-white border border-slate-100 shadow-lift'
     case 'surface':
     default:
-      return 'bg-white border border-slate-200/80 shadow-card'
+      return 'bg-white border-slate-200'
   }
 })
 </script>

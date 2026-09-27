@@ -16,7 +16,7 @@ const svgRef = ref<SVGSVGElement | null>(null)
 const w = ref(320)
 const h = ref(240)
 
-const PALETTE = ['#6366f1', '#4f46e5', '#818cf8', '#a855f7', '#f59e0b', '#10b981', '#0ea5e9']
+const PALETTE = ['#191D1A', '#1E3A2F', '#373D38', '#8F7020', '#4B524C', '#2E7D4F']
 
 async function render() {
   if (!svgRef.value || !containerRef.value || !props.words?.length) return
@@ -61,7 +61,7 @@ async function render() {
       .join('text')
       .style('font-size', (d: any) => `${d.size}px`)
       .style('font-weight', '700')
-      .style('font-family', 'Inter, Noto Sans TC, sans-serif')
+      .style('font-family', '"Noto Sans TC", sans-serif')
       .style('fill', (_d: any, i: number) => PALETTE[i % PALETTE.length])
       .attr('text-anchor', 'middle')
       .attr('transform', (d: any) => `translate(${d.x},${d.y}) rotate(${d.rotate})`)

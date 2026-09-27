@@ -1,16 +1,16 @@
 <template>
-  <div class="inline-flex rounded-xl bg-slate-100 p-1 border border-slate-200/80">
+  <div class="inline-flex rounded-md border border-slate-300 bg-white overflow-hidden">
     <button
-      v-for="opt in options"
+      v-for="(opt, i) in options"
       :key="opt.value"
       type="button"
       @click="$emit('update:modelValue', opt.value)"
-      class="px-3 py-1 text-xs font-semibold rounded-lg transition-all duration-200 btn-press"
-      :class="
-        modelValue === opt.value
-          ? 'bg-white text-brand-600 shadow-sm'
-          : 'text-slate-500 hover:text-slate-800'
-      "
+      class="px-3 py-1.5 text-xs font-medium transition-colors"
+      :class="[
+        modelValue === opt.value ? 'bg-cloth text-white' : 'text-slate-600 hover:bg-slate-50',
+        i > 0 ? 'border-l border-slate-300' : '',
+      ]"
+      :aria-pressed="modelValue === opt.value"
     >
       {{ opt.label }}
     </button>

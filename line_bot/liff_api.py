@@ -58,6 +58,33 @@ def _get_group_name(group_id: str) -> str:
     return name
 _TOKEN_TTL = 300  # seconds
 
+_member_pic_cache: dict[tuple[str, str], tuple[str | None, float]] = {}
+_MEMBER_PIC_TTL = 6 * 3600  # 6 hours
+
+
+def _get_member_picture(group_id: str, user_id: str) -> str | None:
+    """LINE 群組成員大頭貼網址，快取 6 小時；抓不到回 None。"""
+    import json as _json
+    token = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+    if not token or not group_id or not user_id:
+        return None
+    now = time.time()
+    cached_pic = _member_pic_cache.get((group_id, user_id))
+    if cached_pic and cached_pic[1] > now:
+        return cached_pic[0]
+    try:
+        req = urllib.request.Request(
+            f"https://api.line.me/v2/bot/group/{group_id}/member/{user_id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            pic = _json.loads(resp.read()).get("pictureUrl")
+    except Exception:
+        pic = None
+    _member_pic_cache[(group_id, user_id)] = (pic, now + _MEMBER_PIC_TTL)
+    return pic
+
+
 
 def _verify_liff_token(token: str) -> str | None:
     """Verify a LINE LIFF ID token via LINE's oauth2 verify endpoint.
@@ -373,6 +400,10 @@ def admin_award_badges(trip_id):
     if not _is_admin(user_id):
         return _forbid("not_admin")
     awarded = award_badges_for_trip(trip_id)
+    # 有新發出的徽章就在群組推頒獎卡（背景執行，不拖慢回應）
+    if awarded:
+        from line_bot.notify import announce_badges
+        _threading.Thread(target=announce_badges, args=(trip_id, awarded), daemon=True).start()
     return jsonify({"awarded": awarded})
 
 
@@ -595,4 +626,30 @@ def nicknames():
                     "auto_aliases": list(reversed(autos)),
                 })
         members.sort(key=lambda m: m["auto_aliases"][0].get("created", ""), reverse=True)
+        _attach_member_pictures(group_id, members)
     return jsonify({"max_per_member": MAX_AUTO_ALIASES, "members": members})
+
+
+def _attach_member_pictures(group_id: str, members: list[dict]) -> None:
+    """稱號以 user_name 為 key（與 auto_nickname 相同），查出 user_id 後並行抓大頭貼。"""
+    from concurrent.futures import ThreadPoolExecutor
+    from travel.db import get_conn
+    names = [m["name"] for m in members]
+    if not names:
+        return
+    with get_conn() as conn:
+        placeholders = ",".join("?" * len(names))
+        rows = conn.execute(
+            # SQLite：MAX() 放在 SELECT 時，裸欄位 user_id 取自最新那一筆
+            f"""SELECT user_name, user_id, MAX(timestamp) FROM messages
+                WHERE group_id = ? AND user_name IN ({placeholders})
+                GROUP BY user_name""",
+            (group_id, *names),
+        ).fetchall()
+    ids = {r[0]: r[1] for r in rows}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        pics = dict(zip(names, pool.map(
+            lambda n: _get_member_picture(group_id, ids.get(n, "")), names)))
+    for m in members:
+        m["user_id"] = ids.get(m["name"])
+        m["picture_url"] = pics.get(m["name"])

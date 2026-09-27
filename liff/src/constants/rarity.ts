@@ -1,5 +1,5 @@
-// 稀有度 5 階權威清單（漸層視覺升級版）
-// key / 中文 / emoji / Tailwind 樣式
+// 稀有度 5 階權威清單。line 是該階的印刷加工主色（紀念章外框、LINE 卡片）：
+// 普通灰（平印）→ 稀有原子筆藍（壓紋）→ 極稀有綠（燙綠箔）→ 史詩燙金 → 傳說印章紅（鐳射箔）。
 export type RarityKey = 'common' | 'rare' | 'super_rare' | 'epic' | 'legendary'
 
 export interface RarityDef {
@@ -13,69 +13,54 @@ export interface RarityDef {
   pill: string
   date: string
   dot: string
-  badgeGlow?: string
+  line: string
 }
 
 export const RARITY: Record<RarityKey, RarityDef> = {
   common: {
-    key: 'common',
-    zh: '普通',
-    emoji: '⚪',
-    order: 1,
-    card: 'bg-white border-slate-200/80 shadow-card hover:border-slate-300',
-    icon: 'bg-slate-100 text-slate-600',
-    name: 'text-slate-800',
-    pill: 'bg-slate-100 text-slate-600 border border-slate-200',
-    date: 'text-slate-400',
-    dot: 'bg-slate-300',
+    key: 'common', zh: '普通', emoji: '', order: 1, line: '#8C938C',
+    card: 'bg-white border-slate-200',
+    icon: 'bg-white text-slate-600',
+    name: 'text-slate-900',
+    pill: 'text-slate-600 border border-slate-300',
+    date: 'text-slate-500',
+    dot: 'bg-slate-400',
   },
   rare: {
-    key: 'rare',
-    zh: '稀有',
-    emoji: '🔵',
-    order: 2,
-    card: 'bg-gradient-to-br from-blue-50 to-sky-100/70 border-blue-200 shadow-card hover:border-blue-300',
-    icon: 'bg-blue-100 text-blue-700',
-    name: 'text-blue-950',
-    pill: 'bg-blue-100 text-blue-700 border border-blue-200 font-bold',
-    date: 'text-blue-600/80',
-    dot: 'bg-blue-500',
+    key: 'rare', zh: '稀有', emoji: '', order: 2, line: '#2346A0',
+    card: 'bg-white border-slate-200',
+    icon: 'bg-white text-brand-700',
+    name: 'text-slate-900',
+    pill: 'text-brand-700 border border-brand-500',
+    date: 'text-slate-500',
+    dot: 'bg-brand-500',
   },
   super_rare: {
-    key: 'super_rare',
-    zh: '極稀有',
-    emoji: '🟡',
-    order: 3,
-    card: 'bg-gradient-to-br from-amber-100/90 via-amber-50/90 to-yellow-100/80 border-amber-300 shadow-card hover:border-amber-400',
-    icon: 'bg-amber-200/80 text-amber-800',
-    name: 'text-amber-950',
-    pill: 'bg-amber-200/90 text-amber-900 border border-amber-300 font-black shadow-2xs',
-    date: 'text-amber-700 font-medium',
-    dot: 'bg-amber-500 ring-2 ring-amber-200',
+    key: 'super_rare', zh: '極稀有', emoji: '', order: 3, line: '#2E7D4F',
+    card: 'bg-white border-slate-200',
+    icon: 'bg-white text-success-700',
+    name: 'text-slate-900',
+    pill: 'text-success-700 border border-success-500',
+    date: 'text-slate-500',
+    dot: 'bg-success-500',
   },
   epic: {
-    key: 'epic',
-    zh: '史詩',
-    emoji: '🟣',
-    order: 4,
-    card: 'bg-gradient-to-br from-purple-100/80 via-fuchsia-50/80 to-purple-50 border-purple-300 shadow-card badge-epic hover:border-purple-400',
-    icon: 'bg-purple-200/80 text-purple-800',
-    name: 'text-purple-950',
-    pill: 'bg-purple-200/90 text-purple-900 border border-purple-300 font-black shadow-2xs',
-    date: 'text-purple-700 font-medium',
-    dot: 'bg-purple-500 ring-2 ring-purple-200',
+    key: 'epic', zh: '史詩', emoji: '', order: 4, line: '#B8943A',
+    card: 'bg-white border-slate-200',
+    icon: 'bg-white text-accent-700',
+    name: 'text-slate-900',
+    pill: 'text-slate-900 bg-accent-400 border border-accent-400',
+    date: 'text-slate-500',
+    dot: 'bg-accent-400',
   },
   legendary: {
-    key: 'legendary',
-    zh: '傳說',
-    emoji: '🔴',
-    order: 5,
-    card: 'bg-gradient-to-br from-rose-100/90 via-rose-50/90 to-orange-100/70 border-rose-300 shadow-card badge-legendary hover:border-rose-400',
-    icon: 'bg-rose-200/80 text-rose-800',
-    name: 'text-rose-950',
-    pill: 'bg-gradient-to-r from-rose-500 to-amber-500 text-white font-black shadow-2xs',
-    date: 'text-rose-700 font-semibold',
-    dot: 'bg-rose-500 ring-2 ring-rose-300 dot-ping-slow',
+    key: 'legendary', zh: '傳說', emoji: '', order: 5, line: '#B8332A',
+    card: 'bg-white border-danger-500',
+    icon: 'bg-white text-danger-700',
+    name: 'text-slate-900',
+    pill: 'text-white bg-danger-500 border border-danger-500',
+    date: 'text-slate-500',
+    dot: 'bg-danger-500',
   },
 }
 

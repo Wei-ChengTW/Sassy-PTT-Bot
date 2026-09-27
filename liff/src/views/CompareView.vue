@@ -1,15 +1,13 @@
 <template>
-  <div class="space-y-6">
-    <h1 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
-      <span>👥 成員互動對比</span>
-    </h1>
+  <div>
+    <PageSign title="成員互動對比" en="Compare" />
 
     <!-- 成員選擇 -->
-    <div class="grid grid-cols-2 gap-3">
+    <div class="grid grid-cols-2 gap-2 mb-5">
       <select
         v-model="userA"
         @change="loadCompare"
-        class="text-xs bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-brand-400"
+        class="text-sm bg-white border-2 border-cloth rounded-md px-3 py-2 text-slate-900 font-bold focus:outline-none"
       >
         <option value="" disabled>選擇成員 A</option>
         <option v-for="u in members" :key="u.user_id" :value="u.user_id">{{ u.name }}</option>
@@ -17,17 +15,16 @@
       <select
         v-model="userB"
         @change="loadCompare"
-        class="text-xs bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-slate-700 font-semibold focus:outline-none focus:ring-2 focus:ring-fuchsia-400"
+        class="text-sm bg-white border-2 border-danger-500 rounded-md px-3 py-2 text-slate-900 font-bold focus:outline-none"
       >
         <option value="" disabled>選擇成員 B</option>
         <option v-for="u in members" :key="u.user_id" :value="u.user_id">{{ u.name }}</option>
       </select>
     </div>
 
-    <div v-if="membersLoading" class="skeleton rounded-2xl h-48" />
+    <div v-if="membersLoading" class="skeleton rounded-xl h-48" />
     <EmptyState
       v-else-if="membersError"
-      icon="⚠️"
       title="無法載入成員名單"
       :description="membersError"
     />
@@ -35,61 +32,53 @@
     <template v-else>
       <EmptyState
         v-if="!userA || !userB"
-        icon="⚖️"
         title="請選擇兩位成員"
-        description="從上方下拉選單挑選兩位群組好友，立即比較彼此的發言習慣與默契！"
+        description="從上方下拉選單挑選兩位群組好友，比較彼此的發言習慣與默契。"
       />
       <EmptyState
         v-else-if="userA === userB"
-        icon="🤔"
         title="請選擇兩位不同的成員"
         description="自己跟自己比較相似度一定是 100% 啦！"
       />
 
-      <div v-else-if="loading" class="skeleton rounded-2xl h-48" />
+      <div v-else-if="loading" class="skeleton rounded-xl h-48" />
       <EmptyState
         v-else-if="error"
-        icon="⚠️"
         title="對比資料載入失敗"
         :description="error"
       />
 
-      <div v-else-if="cmp" class="space-y-4 card-rise">
+      <div v-else-if="cmp" class="space-y-3">
         <!-- 相似度 -->
-        <BaseCard class="p-6 text-center bg-gradient-to-br from-brand-50 via-white to-fuchsia-50 border-brand-100">
-          <p class="text-4xl font-black font-mono tabular-nums text-brand-600">
-            <CountUp :value="cmp.similarity" :duration="800" :format="(v) => `${v}%`" />
-          </p>
-          <p class="text-xs font-bold text-slate-600 mt-1">
-            默契相似度 · <span class="text-brand-700">{{ similarityLabel }}</span>
+        <BaseCard class="p-5 flex items-end justify-between gap-4">
+          <div>
+            <p class="text-xs text-slate-500">默契相似度</p>
+            <p class="text-sm font-bold text-slate-900 mt-0.5">{{ similarityLabel }}</p>
+          </div>
+          <p class="font-num text-[52px] leading-none font-semibold text-slate-900">
+            <CountUp :value="cmp.similarity" :duration="600" :format="(v) => `${v}%`" />
           </p>
         </BaseCard>
 
-        <!-- 對比列 -->
+        <!-- 對比列：兩條路線 -->
         <BaseCard class="overflow-hidden">
-          <div class="grid grid-cols-3 px-4 py-3 bg-slate-50 border-b border-slate-100 text-xs font-bold">
-            <span class="text-brand-600 truncate">{{ cmp.a.name }}</span>
-            <span class="text-center text-slate-300 font-normal">VS</span>
-            <span class="text-right text-fuchsia-600 truncate">{{ cmp.b.name }}</span>
+          <div class="grid grid-cols-[1fr_auto_1fr] gap-3 px-4 py-2.5 border-b border-slate-200 text-sm font-bold">
+            <span class="truncate flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cloth shrink-0" />{{ cmp.a.name }}</span>
+            <span class="text-slate-400 font-normal text-xs self-center">VS</span>
+            <span class="truncate flex items-center gap-1.5 justify-end">{{ cmp.b.name }}<span class="w-2.5 h-2.5 rounded-full bg-danger-500 shrink-0" /></span>
           </div>
           <div
             v-for="row in rows"
             :key="row.label"
-            class="grid grid-cols-3 px-4 py-3.5 items-center border-t border-slate-100/80 transition-colors hover:bg-slate-50/50"
+            class="grid grid-cols-[1fr_auto_1fr] gap-3 px-4 py-3 items-center border-t border-slate-100 first:border-t-0"
           >
-            <span
-              class="text-xs font-bold font-mono tabular-nums"
-              :class="row.aWin ? 'text-brand-600 font-black' : 'text-slate-500'"
-            >
+            <span class="font-num text-[17px]" :class="row.aWin ? 'font-bold text-cloth' : 'font-medium text-slate-500'">
               {{ row.a }}
             </span>
-            <span class="text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <span class="text-center text-xs text-slate-600">
               {{ row.label }}
             </span>
-            <span
-              class="text-xs font-bold font-mono tabular-nums text-right"
-              :class="row.bWin ? 'text-fuchsia-600 font-black' : 'text-slate-500'"
-            >
+            <span class="font-num text-[17px] text-right" :class="row.bWin ? 'font-bold text-danger-700' : 'font-medium text-slate-500'">
               {{ row.b }}
             </span>
           </div>
@@ -100,6 +89,7 @@
 </template>
 
 <script setup lang="ts">
+import PageSign from '@/components/PageSign.vue'
 import { ref, computed, onMounted } from 'vue'
 import { api } from '@/api/client'
 import { useRefreshOnAnalysis } from '@/composables/useRefreshOnAnalysis'
@@ -149,10 +139,10 @@ const rows = computed(() => {
 
 const similarityLabel = computed(() => {
   const s = cmp.value?.similarity ?? 0
-  if (s >= 80) return '超級麻吉 🔥'
-  if (s >= 60) return '頗有默契 ✨'
-  if (s >= 40) return '各有風格 ⚖️'
-  return '互補型夥伴 🧩'
+  if (s >= 80) return '超級麻吉'
+  if (s >= 60) return '頗有默契'
+  if (s >= 40) return '各有風格'
+  return '互補型夥伴'
 })
 
 async function loadCompare() {

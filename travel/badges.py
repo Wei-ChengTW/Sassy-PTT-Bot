@@ -164,6 +164,7 @@ def award_badges_for_trip(trip_id: str) -> list[dict]:
                 "badge_emoji": emoji,
                 "badge_rarity": rarity,
                 "badge_name": name,
+                "user_name": user_name,
             })
     return new_badges
 

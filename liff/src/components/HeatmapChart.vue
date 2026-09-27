@@ -2,25 +2,8 @@
   <div class="space-y-3">
     <!-- 模式切換：週期常態 (週一～週日) vs 近期每日 (MM/DD) -->
     <div class="flex items-center justify-between">
-      <span class="text-xs font-bold text-slate-700">活躍時段分佈熱力</span>
-      <div class="flex rounded-xl bg-slate-100 p-0.5 border border-slate-200/80 text-xs">
-        <button
-          type="button"
-          @click="viewMode = 'dates'"
-          class="px-2.5 py-1 rounded-lg font-bold transition-all btn-press"
-          :class="viewMode === 'dates' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
-        >
-          每日熱力
-        </button>
-        <button
-          type="button"
-          @click="viewMode = 'weekly'"
-          class="px-2.5 py-1 rounded-lg font-bold transition-all btn-press"
-          :class="viewMode === 'weekly' ? 'bg-white text-brand-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'"
-        >
-          週期常態
-        </button>
-      </div>
+      <span class="text-xs text-slate-500">每格＝一小時的訊息量</span>
+      <SegmentedControl v-model="viewMode" :options="[{ value: 'dates', label: '每日熱力' }, { value: 'weekly', label: '週期常態' }]" />
     </div>
 
     <!-- 每日熱力視圖 (MM/DD HH:00) -->
@@ -31,7 +14,7 @@
           <span
             v-for="h in 24"
             :key="h"
-            class="text-[9px] text-slate-400 font-mono text-center tabular-nums"
+            class="text-[10px] text-slate-500 font-mono text-center tabular-nums"
             :style="cellStyle"
           >
             {{ (h - 1) % 6 === 0 ? h - 1 : '' }}
@@ -39,11 +22,11 @@
         </div>
         <!-- Rows by recent dates -->
         <div v-for="row in dateRows" :key="row.date" class="flex items-center mb-1">
-          <span class="text-[10px] text-slate-500 w-12 shrink-0 font-bold font-mono tabular-nums">{{ row.label }}</span>
+          <span class="text-[11px] text-slate-600 w-12 shrink-0 font-mono">{{ row.label }}</span>
           <span
             v-for="h in 24"
             :key="h"
-            class="rounded-sm cursor-pointer transition-transform hover:scale-125"
+            class="rounded-[1px] cursor-pointer"
             :style="dateCellColor(row.date, h - 1)"
             :title="`${row.label} ${h - 1}:00 · ${dateCountAt(row.date, h - 1)} 則`"
           />
@@ -59,7 +42,7 @@
           <span
             v-for="h in 24"
             :key="h"
-            class="text-[9px] text-slate-400 font-mono text-center tabular-nums"
+            class="text-[10px] text-slate-500 font-mono text-center tabular-nums"
             :style="cellStyle"
           >
             {{ (h - 1) % 6 === 0 ? h - 1 : '' }}
@@ -67,11 +50,11 @@
         </div>
         <!-- Rows by day of week -->
         <div v-for="row in weeklyRows" :key="row.dow" class="flex items-center mb-1">
-          <span class="text-[10px] text-slate-500 w-8 shrink-0 font-bold">週{{ row.label }}</span>
+          <span class="text-[11px] text-slate-600 w-8 shrink-0">週{{ row.label }}</span>
           <span
             v-for="h in 24"
             :key="h"
-            class="rounded-sm cursor-pointer transition-transform hover:scale-125"
+            class="rounded-[1px] cursor-pointer"
             :style="weeklyCellColor(row.dow, h - 1)"
             :title="`${recentDowDate(row.dow)} 週${row.label} ${h - 1}:00 · ${weeklyCountAt(row.dow, h - 1)} 則`"
           />
@@ -79,21 +62,28 @@
       </div>
     </div>
 
-    <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-slate-500">
-      <span v-if="peak">
-        🔥 巔峰時段：<span class="font-bold text-slate-800">{{ peak.label }} {{ peak.hour }}:00</span>
-        <span class="opacity-75 font-mono">（{{ peak.count }} 則）</span>
-      </span>
-      <span>
-        🌙 夜貓指數：<span class="text-amber-500 font-bold">{{ '⭐'.repeat(nightStars) || '—' }}</span>
-        <span class="opacity-75 font-mono ml-1">{{ nightPct }}% 深夜發言</span>
-      </span>
-    </div>
+    <dl class="mt-4 pt-3 border-t border-slate-100 grid grid-cols-2 gap-3">
+      <div v-if="peak">
+        <dt class="text-xs text-slate-500">巔峰時段</dt>
+        <dd class="text-sm font-bold text-slate-900 mt-0.5">{{ peak.label }} <span class="font-num">{{ peak.hour }}:00</span>
+          <span class="font-num text-xs font-normal text-slate-500 ml-1">{{ peak.count }} 則</span></dd>
+      </div>
+      <div>
+        <dt class="text-xs text-slate-500">夜貓指數</dt>
+        <dd class="text-sm font-bold text-slate-900 mt-0.5 flex items-center gap-2">
+          <span><span class="font-num">{{ nightPct }}%</span><span class="text-xs font-normal text-slate-500 ml-1">深夜發言</span></span>
+          <span class="flex gap-0.5" :aria-label="`夜貓指數 ${nightStars} / 5`">
+            <span v-for="i in 5" :key="i" class="w-2.5 h-1.5 rounded-[1px]" :class="i <= nightStars ? 'bg-slate-800' : 'bg-slate-200'" />
+          </span>
+        </dd>
+      </div>
+    </dl>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import SegmentedControl from '@/components/SegmentedControl.vue'
 
 interface Cell { day_of_week: number; hour: number; count: number }
 interface DateCell { date: string; hour: number; count: number }
@@ -156,7 +146,7 @@ function dateCellColor(date: string, hour: number) {
   const alpha = v === 0 ? 0 : 0.15 + 0.85 * (v / dayMax)
   return {
     ...cellStyle,
-    backgroundColor: v === 0 ? '#f1f5f9' : `rgba(99,102,241,${alpha.toFixed(3)})`,
+    backgroundColor: v === 0 ? '#EEF0ED' : `rgba(30,58,47,${alpha.toFixed(3)})`,
     marginRight: '2px',
   }
 }
@@ -179,7 +169,7 @@ function weeklyCellColor(dow: number, hour: number) {
   const alpha = v === 0 ? 0 : 0.15 + 0.85 * (v / maxWeeklyCount.value)
   return {
     ...cellStyle,
-    backgroundColor: v === 0 ? '#f1f5f9' : `rgba(99,102,241,${alpha.toFixed(3)})`,
+    backgroundColor: v === 0 ? '#EEF0ED' : `rgba(30,58,47,${alpha.toFixed(3)})`,
     marginRight: '2px',
   }
 }
