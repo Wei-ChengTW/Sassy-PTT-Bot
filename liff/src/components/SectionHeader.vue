@@ -1,7 +1,7 @@
 <template>
   <div class="flex items-center justify-between gap-3 mb-3 mt-8">
     <div class="flex items-baseline gap-2 min-w-0">
-      <span class="line-dot shrink-0 self-center" aria-hidden="true" />
+      <span class="chapter-mark shrink-0 self-center" aria-hidden="true" />
       <h2 class="font-bold text-[15px] text-slate-900 truncate">
         {{ title }}
       </h2>

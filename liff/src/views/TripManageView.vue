@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign :title="detail?.trip.title || '管理旅行'" en="Manage Trip" line="trip" back="返回">
+    <PageSign :title="detail?.trip.title || '管理旅行'" en="Manage Trip" back="返回">
       <template v-if="detail && !isEditing" #action>
         <button
           @click="startEdit"

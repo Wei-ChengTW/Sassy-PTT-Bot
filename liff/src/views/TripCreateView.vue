@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign title="建立旅行與事件" en="New Trip" line="trip" back="返回" />
+    <PageSign title="建立旅行與事件" en="New Trip" back="返回" />
 
     <BaseCard class="p-5">
       <form @submit.prevent="submit" class="space-y-5">

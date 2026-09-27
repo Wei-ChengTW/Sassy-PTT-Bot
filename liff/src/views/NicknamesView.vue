@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign title="本週稱號" en="Nicknames" line="people" />
+    <PageSign title="本週稱號" en="Nicknames" />
 
     <!-- 說明 -->
     <BaseCard variant="subtle" class="p-4">

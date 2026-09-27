@@ -1,9 +1,11 @@
 <template>
   <div class="flex flex-col items-center justify-center py-12 px-4 text-center">
-    <!-- 路線終點符號 -->
-    <svg class="mb-4" width="72" height="16" viewBox="0 0 72 16" aria-hidden="true">
-      <line x1="0" y1="8" x2="56" y2="8" stroke="#C5CAC4" stroke-width="4" stroke-dasharray="6 5" />
-      <circle cx="62" cy="8" r="6" fill="#fff" stroke="#8C938C" stroke-width="3" />
+    <!-- 空白的相片格：紀念冊還沒貼上照片的那一頁 -->
+    <svg class="mb-4" width="48" height="58" viewBox="0 0 48 58" aria-hidden="true">
+      <rect x="1" y="1" width="46" height="46" rx="2" fill="#F7F8F6" stroke="#C5CAC4" stroke-width="2" stroke-dasharray="5 4" />
+      <circle cx="24" cy="19" r="6" fill="none" stroke="#C5CAC4" stroke-width="2" />
+      <path d="M12 40a12 10 0 0124 0" fill="none" stroke="#C5CAC4" stroke-width="2" />
+      <rect x="14" y="54" width="20" height="1.5" fill="#B8943A" />
     </svg>
     <h3 class="text-base font-bold text-slate-900">{{ title }}</h3>
     <p v-if="description" class="text-[13px] text-slate-500 mt-1 max-w-xs leading-relaxed">

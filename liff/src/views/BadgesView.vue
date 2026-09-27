@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign title="我的成就勳章" en="Awards" line="people">
+    <PageSign title="我的成就勳章" en="Awards">
       <template v-if="badges.length" #action>
         <span class="text-sm text-slate-300">已解鎖 <span class="font-num text-xl font-semibold text-white">{{ badges.length }}</span> 枚</span>
       </template>

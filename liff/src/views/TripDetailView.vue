@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign :title="detail?.trip.title || '旅程'" en="Trip Record" line="trip" back="返回列表">
+    <PageSign :title="detail?.trip.title || '旅程'" en="Trip Record" back="返回列表">
       <template v-if="detail" #action>
         <RaritySeal :rarity="detail.trip.rarity" :emoji="detail.trip.custom_emoji || detail.trip.badge_emoji" :size="68" />
       </template>

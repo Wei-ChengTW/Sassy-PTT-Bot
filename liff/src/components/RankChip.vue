@@ -1,7 +1,7 @@
 <template>
   <span
-    class="station-chip shrink-0"
-    :class="[rank <= 3 ? 'station-chip--solid' : '', size === 'sm' ? '!min-w-[1.625rem] !h-[1.625rem] !text-[0.85rem]' : '']"
+    class="seat-chip shrink-0"
+    :class="[rank <= 3 ? 'seat-chip--solid' : '', size === 'sm' ? '!min-w-[1.625rem] !h-[1.625rem] !text-[0.85rem]' : '']"
     :style="{ '--line': lineColor }"
     :aria-label="`第 ${rank} 名`"
   >{{ rank }}</span>

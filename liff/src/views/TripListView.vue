@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign title="群組旅行與活動" en="Trips &amp; Events" line="trip">
+    <PageSign title="群組旅行與活動" en="Trips &amp; Events">
       <template v-if="isAdmin" #action>
         <router-link
           to="/admin/trips/new"

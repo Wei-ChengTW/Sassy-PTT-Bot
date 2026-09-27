@@ -27,7 +27,5 @@
 </template>
 
 <script setup lang="ts">
-import type { LineKey } from '@/constants/lines'
-
-withDefaults(defineProps<{ title?: string; en?: string; line?: LineKey; back?: string }>(), { line: 'data' })
+defineProps<{ title?: string; en?: string; back?: string }>()
 </script>

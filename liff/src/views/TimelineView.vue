@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign title="回憶時光軸" en="Memories" line="trip">
+    <PageSign title="回憶時光軸" en="Memories">
       共 <span class="font-num">{{ trips.length }}</span> 段群組記憶
       <span v-if="trips.length"> · <span class="font-num">{{ oldestYear }}–{{ newestYear }}</span></span>
     </PageSign>

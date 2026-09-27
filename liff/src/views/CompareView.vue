@@ -60,7 +60,7 @@
           </p>
         </BaseCard>
 
-        <!-- 對比列：兩條路線 -->
+        <!-- 對比列：A 深綠、B 印章紅 -->
         <BaseCard class="overflow-hidden">
           <div class="grid grid-cols-[1fr_auto_1fr] gap-3 px-4 py-2.5 border-b border-slate-200 text-sm font-bold">
             <span class="truncate flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cloth shrink-0" />{{ cmp.a.name }}</span>

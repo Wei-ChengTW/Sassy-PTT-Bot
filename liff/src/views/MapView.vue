@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign title="足跡探索地圖" en="Footprints" line="trip">
+    <PageSign title="足跡探索地圖" en="Footprints">
       <template #action>
         <button
           @click="fitBounds"

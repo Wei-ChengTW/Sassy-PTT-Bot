@@ -1,7 +1,7 @@
 <template>
   <div>
     <div class="flex items-baseline gap-2 flex-wrap">
-      <span class="line-dot shrink-0 self-center" aria-hidden="true" />
+      <span class="chapter-mark shrink-0 self-center" aria-hidden="true" />
       <h2 class="font-bold text-[15px] text-slate-900">{{ board.title }}</h2>
       <span v-if="board.sparse" class="text-[11px] px-1.5 py-px rounded border border-accent-400 text-accent-700">
         資料量少 · 僅供參考

@@ -1,6 +1,6 @@
 <template>
   <div>
-    <PageSign :title="data ? userName : '個人成就檔案'" en="Member Page" line="people">
+    <PageSign :title="data ? userName : '個人成就檔案'" en="Member Page">
       <template v-if="data" #action>
         <div class="w-14 h-14 rounded-full overflow-hidden bg-slate-700 flex items-center justify-center border-[3px] border-foil">
           <img v-if="userAvatar" :src="userAvatar" :alt="userName" class="w-full h-full object-cover" />
@@ -54,7 +54,7 @@
           <SectionHeader title="聊天人格特質" class="!mt-0" />
           <BaseCard class="px-4 divide-y divide-slate-100">
             <div v-for="(p, i) in data.personality" :key="i" class="flex items-start gap-3 py-3">
-              <span class="line-dot shrink-0 mt-2" aria-hidden="true" />
+              <span class="chapter-mark shrink-0 mt-2" aria-hidden="true" />
               <div class="min-w-0">
                 <p class="text-[15px] font-bold text-slate-900">{{ p.tag }}</p>
                 <p class="text-[13px] text-slate-600 mt-0.5">{{ p.reason }}</p>

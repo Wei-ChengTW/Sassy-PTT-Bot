@@ -6,7 +6,7 @@ import router from './router'
 import { CHART_FONT, CHART_TEXT, CHART_GRID } from './constants/chartColors'
 import './style.css'
 
-// 圖表全域樣式：與介面同字體、灰階格線，折線走直線段（像路線圖）
+// 圖表全域樣式：與介面同字體、灰階格線，折線走直線段
 ChartJS.defaults.font.family = CHART_FONT
 ChartJS.defaults.font.size = 11
 ChartJS.defaults.color = CHART_TEXT

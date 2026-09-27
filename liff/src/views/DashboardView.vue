@@ -38,7 +38,7 @@
 
     <!-- Main Content -->
     <div v-else-if="data">
-      <!-- 到站看板：Top 話癆 -->
+      <!-- 班級紀錄：Top 話癆 -->
       <SectionHeader title="Top 話癆榜" class="!mt-0">
         <template #action>
           <router-link to="/leaderboard" class="text-xs font-medium text-brand-600 py-1">完整排行 →</router-link>
