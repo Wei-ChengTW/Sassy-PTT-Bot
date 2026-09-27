@@ -1,4 +1,4 @@
-"""G8 偵查器：偵測「ji + ba」同音詞（雞巴/紀吧/幾把…）。"""
+"""G8 偵查器：偵測「ji/ju + ba」同音詞（雞巴/紀吧/幾把/居吧…）。"""
 import pytest
 
 from line_bot.bot import is_g8
@@ -13,6 +13,9 @@ from line_bot.bot import is_g8
     "雞，吧",                 # 中間夾標點
     "雞...吧",
     "年紀～吧！",
+    "居吧",                   # ju + ba
+    "你很居吧欸",
+    "居 吧",
     "今天G8了",
     "g8",
     "JB啦",

@@ -251,9 +251,10 @@ def _resolve_context_for_short_message(user_text: str, history: list[dict]) -> s
 G8_REPLY = "對了！說到雞..."
 _G8_LATIN_RE = re.compile(r'(?<![A-Za-z0-9])(?:g8|jb)(?![A-Za-z0-9])', re.IGNORECASE)
 
+_G8_FIRST = {"ji", "ju"}  # 雞巴 / 居吧
 
 def is_g8(text: str) -> bool:
-    """G8 偵查器：相鄰兩字讀音為 ji + ba（不論聲調，中間夾空白/標點/符號也算），或出現 G8 / JB。"""
+    """G8 偵查器：相鄰兩字讀音為 ji/ju + ba（不論聲調，中間夾空白/標點/符號也算），或出現 G8 / JB。"""
     if not text:
         return False
     if _G8_LATIN_RE.search(text):
@@ -263,7 +264,7 @@ def is_g8(text: str) -> bool:
         s for s in lazy_pinyin(text, errors=lambda x: list(x))
         if not (len(s) == 1 and (s.isspace() or unicodedata.category(s)[0] in "PS"))
     ]
-    return any(a == "ji" and b == "ba" for a, b in zip(syllables, syllables[1:]))
+    return any(a in _G8_FIRST and b == "ba" for a, b in zip(syllables, syllables[1:]))
 
 
 def is_group_bare_mention(event) -> bool:
