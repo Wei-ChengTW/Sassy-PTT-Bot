@@ -60,8 +60,8 @@ except ImportError:
 # --- 3. 配置 ---
 
 CGU_API_KEY = os.getenv("CGU_LLM_API_KEY")
-CGU_BASE_URL = "https://air.cgu.edu.tw/cgullmapi/v1"
-CGU_MODEL_NAME = "gpt-5-mini"
+CGU_BASE_URL = os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
+CGU_MODEL_NAME = os.getenv("CGU_LLM_MODEL", "gemma-4-26b-a4b-it")
 
 CLI_PROXY_BASE_URL = os.getenv("CLI_PROXY_BASE_URL", "")
 CLI_PROXY_API_KEY = os.getenv("CLI_PROXY_API_KEY", "")
@@ -311,10 +311,7 @@ class SassyBrain:
         logger.info(f"正在喚醒八卦分身 (primary={PRIMARY_MODEL}, fallback={CGU_MODEL_NAME})")
         self.emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL_NAME)
         self.chroma = chromadb.PersistentClient(path=CHROMA_DB_PATH)
-        self.collection = self.chroma.get_or_create_collection(
-            name="ptt_gossip",
-            embedding_function=self.emb_fn
-        )
+        self._refresh_ptt_collection()
         # 群組記憶（只在主群回覆時使用）
         self.group_collection = self.chroma.get_or_create_collection(
             name=GROUP_MEMORY_COLLECTION,
@@ -351,6 +348,10 @@ class SassyBrain:
             self.line_handler = WebhookHandler(LINE_CHANNEL_SECRET)
             line_config = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
             self.line_api = MessagingApi(ApiClient(line_config))
+            # 搭便車：reply token → 群組，回覆時把該群排隊中的通知小卡接在後面（見 line_bot.riders）
+            self._rider_tokens: dict[str, str] = {}
+            from line_bot.riders import install_reply_hook
+            install_reply_hook(self.line_api, self._rider_tokens)
 
             @self.line_handler.add(MessageEvent)
             def on_message(event):
@@ -478,7 +479,7 @@ class SassyBrain:
                 )
                 logger.info("[AGGREGATOR] 每日 04:00 聚合排程已啟動")
 
-                # 發徽章並在群組推頒獎卡
+                # 發徽章，頒獎卡排進搭便車佇列
                 from line_bot.notify import award_and_announce_ended_trips
                 self._scheduler.add_job(
                     award_and_announce_ended_trips,
@@ -490,34 +491,35 @@ class SassyBrain:
                 )
                 logger.info("[BADGE] 每小時 :05 徽章發放排程已啟動")
 
-                # 那年今日（取代舊的純文字旅行週年提醒）：往年同日出發的旅行 + 一年前今天的金句
-                from line_bot.notify import send_on_this_day, send_trip_countdowns
+                # 推播吃每月額度，只留畢業倒數與「出發當天」倒數；出發前的倒數由成員在 LIFF 手動發送。
+                # 那年今日清晨排進搭便車佇列，當天機器人第一次在該群組回覆時附上（見 line_bot.riders）
+                from line_bot.notify import queue_on_this_day, push_departure_day
                 self._scheduler.add_job(
-                    send_on_this_day,
+                    queue_on_this_day,
                     trigger='cron',
-                    hour=10,
-                    minute=0,
+                    hour=0,
+                    minute=5,
                     id='travel_anniversary',
                     misfire_grace_time=3600,
                     coalesce=True,
                 )
-                logger.info("[ON_THIS_DAY] 每日 10:00 那年今日排程已啟動")
+                logger.info("[RIDER] 每日 00:05 那年今日排入搭便車佇列")
 
-                # 旅行出發倒數（與畢業倒數分開）：出發前 30/14/7/3/1 天與當天
+                # 旅行出發當天（與畢業倒數分開）：唯一推播的旅行通知
                 self._scheduler.add_job(
-                    send_trip_countdowns,
+                    push_departure_day,
                     trigger='cron',
-                    hour=9,
-                    minute=30,
+                    hour=0,
+                    minute=0,
                     id='trip_countdown',
                     misfire_grace_time=3600,
                     coalesce=True,
                 )
-                logger.info("[COUNTDOWN] 每日 09:30 旅行出發倒數排程已啟動")
+                logger.info("[COUNTDOWN] 每日 00:00 出發當天推播排程已啟動")
 
                 # 方案 D：週報／月報自動排程「暫不啟用」（資料量足夠再開）。
-                # 目前改由管理員手動觸發：群組內輸入「/stats 推播週」或「/stats 推播月」。
-                # 需自動化時，把 _push_stats_reports 掛回 cron job 即可（週一 08:00 / 每月 1 號）。
+                # 目前改由管理員手動觸發：群組內輸入「/stats 推播週」或「/stats 推播月」，
+                # 戰報排進搭便車佇列、不推播。需自動化時把 _queue_stats_report 掛回 cron job 即可。
 
             self._scheduler.start()
             logger.info(f"[GRADUATION] 排程已啟動，目標群組: {LINE_GROUP_ID}，畢業日: {GRADUATION_DATE}")
@@ -575,7 +577,7 @@ class SassyBrain:
         text = (clean_text or "").strip()
         low = text.lower()
 
-        is_personal = text in ("我的戰績", "我的战绩") or low in ("/me", "戰績")
+        is_personal = low == "/me"
         is_stats = (
             text in ("統計", "戰報", "群組戰報")
             or low in ("stats", "/stats", "/統計")
@@ -669,11 +671,22 @@ class SassyBrain:
         if sender_id not in admin_ids:
             self._reply_text(event, "這個指令只有管理員能用喔 🔒")
             return
-        # 背景推播（推播可能對多群組、較耗時），先回覆確認避免 reply_token 過期
-        self._reply_text(event, f"開始推播「{label}」戰報… 📤")
-        threading.Thread(
-            target=lambda: self._push_stats_reports(period, label), daemon=True
-        ).start()
+        # 不推播（吃每月額度）：戰報排進各群組的搭便車佇列。
+        # 所在群組先排好，下面這則確認回覆就會直接帶上；其他群組背景排，等機器人下次在那邊回話時附上。
+        targets = self._stats_push_targets(period)
+        here = getattr(event.source, "group_id", None)
+        others = [g for g in targets if g != here]
+        if here in targets:
+            self._queue_stats_report(here, period, label)
+            text = f"{label}戰報 📊"
+        else:
+            text = f"開始準備{label}戰報… 📤"
+        if others:
+            text += f"\n另外 {len(others)} 個群組會在我下次在那邊講話時附上"
+            threading.Thread(
+                target=lambda: [self._queue_stats_report(g, period, label) for g in others], daemon=True
+            ).start()
+        self._reply_text(event, text)
 
     def _reply_text(self, event, text: str) -> None:
         try:
@@ -699,6 +712,8 @@ class SassyBrain:
         """同步 LINE 事件處理（Flask 呼叫，用 asyncio.run 橋接非同步）。"""
         if not isinstance(event, MessageEvent):
             return
+
+        self._register_rider_token(event)
 
         if os.getenv("TRAVEL_STORAGE_ENABLED", "true").lower() == "true":
             try:
@@ -853,10 +868,21 @@ class SassyBrain:
                         self._spontaneous_lock.release()
                 threading.Thread(target=reply_spontaneous, daemon=True).start()
 
-    def _quoted_replier(self, event, chat_id: str, tag: str, push_fallback: bool = False):
+    def _register_rider_token(self, event) -> None:
+        """群組訊息的 reply token 記下所屬群組，讓 reply hook 知道要附哪一群的待送小卡。"""
+        tokens = getattr(self, "_rider_tokens", None)
+        group_id = getattr(event.source, "group_id", None)
+        if tokens is None or not group_id or not getattr(event, "reply_token", None):
+            return
+        tokens[event.reply_token] = group_id
+        for stale in list(tokens)[:-500]:   # 沒用到的 token 會過期，只留最近 500 個
+            tokens.pop(stale, None)
+
+    def _quoted_replier(self, event, chat_id: str, tag: str, queue_fallback: bool = False):
         """回傳 reply(text)：引用發問訊息回覆並記入對話歷史。reply token 只能用一次，呼叫端只呼叫一次。
 
-        push_fallback=True：回覆失敗（多半是 LLM 跑太久、reply token 過期）時改用推播（吃每月額度）。
+        queue_fallback=True：回覆失敗（多半是 LLM 跑太久、reply token 過期）時排進搭便車佇列，
+        等下次在群組回覆時附上（不推播，推播吃每月額度）。
         """
         reply_token = event.reply_token
         quote_token = event.message.quote_token
@@ -872,21 +898,14 @@ class SassyBrain:
                 )
                 self._record_turn(chat_id, "鍵盤俠", text, "bot")
             except Exception as e:
-                if not push_fallback:
+                if not queue_fallback:
                     logger.error(f"[{tag}] 回覆失敗: {e}")
                     return
-                logger.warning(f"[{tag}] 回覆失敗，改用推播: {e}")
-                try:
-                    self.line_api.push_message(
-                        PushMessageRequest(
-                            to=chat_id,
-                            messages=[LineTextMessage(text=text, **({'quote_token': quote_token} if quote_token else {}))],
-                        ),
-                        _request_timeout=10.0,
-                    )
+                logger.warning(f"[{tag}] 回覆失敗，排到下次回覆附上: {e}")
+                from line_bot.riders import enqueue
+                msg = LineTextMessage(text=text, **({'quote_token': quote_token} if quote_token else {}))
+                if enqueue(chat_id, f"{tag.lower()}:{reply_token}", msg, int(time.time()) + 3600):
                     self._record_turn(chat_id, "鍵盤俠", text, "bot")
-                except Exception as e2:
-                    logger.error(f"[{tag}] 推播也失敗: {e2}")
 
         return reply
 
@@ -894,7 +913,7 @@ class SassyBrain:
         """背景撈發問者錯過的對話（上次講話之後）→ LLM 摘要 → 引用發問訊息回覆。"""
         before_ts = int(getattr(event, "timestamp", 0)) or int(time.time() * 1000)
         user_id = getattr(event.source, "user_id", "") or ""
-        reply = self._quoted_replier(event, chat_id, "SUMMARY", push_fallback=True)
+        reply = self._quoted_replier(event, chat_id, "SUMMARY", queue_fallback=True)
 
         def work():
             try:
@@ -967,10 +986,24 @@ class SassyBrain:
 
     # ── Core logic ─────────────────────────────────────────────────────────
 
+    def _refresh_ptt_collection(self):
+        # indexer.py 會刪掉 ptt_gossip 再重建（換新 UUID），舊的 collection 物件之後每次 query 都會失敗
+        self.collection = self.chroma.get_or_create_collection(
+            name="ptt_gossip",
+            embedding_function=self.emb_fn
+        )
+
     def get_relevant_snippets(self, query, n_results=3):
         """回傳 (top1, rest)：top1 給當「真實推文範例」，rest 給當「其他相關語料」。"""
         try:
-            results = self.collection.query(query_texts=[query], n_results=n_results)
+            try:
+                results = self.collection.query(query_texts=[query], n_results=n_results)
+            except Exception as e:
+                if "does not exist" not in str(e):
+                    raise
+                logger.info("[RAG] ptt_gossip 已被重建，重新取得 collection")
+                self._refresh_ptt_collection()
+                results = self.collection.query(query_texts=[query], n_results=n_results)
             docs = results['documents'][0] if results['documents'] else []
             if not docs:
                 return None, []
@@ -1330,7 +1363,18 @@ class SassyBrain:
                 )
                 if where_filter:
                     query_kwargs["where"] = where_filter
-                results = self.group_collection.query(**query_kwargs)
+                try:
+                    results = self.group_collection.query(**query_kwargs)
+                except Exception as e:
+                    if "does not exist" in str(e):
+                        logger.info("[GROUP_MEMORY] group_memory 已被重建，重新取得 collection")
+                        self.group_collection = self.chroma.get_or_create_collection(
+                            name=GROUP_MEMORY_COLLECTION,
+                            embedding_function=self.emb_fn
+                        )
+                        results = self.group_collection.query(**query_kwargs)
+                    else:
+                        raise
                 docs = results['documents'][0] if results and results.get('documents') else []
                 metas = results['metadatas'][0] if results and results.get('metadatas') else []
                 candidates = [
@@ -1769,6 +1813,7 @@ class SassyBrain:
                 check=True,
                 timeout=18000,  # 多語模型 (L12) 比 L6 慢約 2x，100K 筆約 2.5hr，放寬到 5hr
             )
+            self._refresh_ptt_collection()
             logger.info("[WEEKLY_CRAWL] 索引重建完成。")
         except subprocess.TimeoutExpired:
             logger.error("[WEEKLY_CRAWL] 超時，本週跳過。")
@@ -1827,40 +1872,25 @@ class SassyBrain:
             logger.warning(f"[STATS_PUSH] 取得推播群組失敗: {e}")
             return [LINE_GROUP_ID] if LINE_GROUP_ID else []
 
-    def _push_stats_reports(self, period: str, period_label: str):
-        """方案 D：定時推播群組戰報 Carousel 到綁定 / 活躍群組。"""
-        if not self.line_api:
-            return
+    def _queue_stats_report(self, gid: str, period: str, period_label: str) -> None:
+        """方案 D：群組戰報 Carousel 排進搭便車佇列（兩天內有效）。"""
         try:
             import line_bot.stats_cards as cards
+            from line_bot.riders import enqueue
             from travel.stats import get_dashboard_data
             from travel.stats_extended import (
                 get_leaderboard_data, get_interaction_data, get_topics_data,
             )
+            carousel = cards.build_report_carousel(
+                get_dashboard_data(gid, period=period),
+                get_leaderboard_data(gid, period),
+                get_interaction_data(gid, period),
+                get_topics_data(gid, period),
+                LIFF_URL, period_label,
+            )
+            enqueue(gid, f"report:{period}:{int(time.time())}", carousel, int(time.time()) + 2 * 86400)
         except Exception as e:
-            logger.error(f"[STATS_PUSH] 模組載入失敗: {e}")
-            return
-
-        targets = self._stats_push_targets(period)
-        if not targets:
-            logger.info("[STATS_PUSH] 無可推播群組，跳過")
-            return
-        for gid in targets:
-            try:
-                carousel = cards.build_report_carousel(
-                    get_dashboard_data(gid, period=period),
-                    get_leaderboard_data(gid, period),
-                    get_interaction_data(gid, period),
-                    get_topics_data(gid, period),
-                    LIFF_URL, period_label,
-                )
-                self.line_api.push_message(
-                    PushMessageRequest(to=gid, messages=[carousel]),
-                    _request_timeout=10.0,
-                )
-                logger.info(f"[STATS_PUSH] 已推播{period_label}戰報 group={gid}")
-            except Exception as e:
-                logger.warning(f"[STATS_PUSH] 推播失敗 group={gid}: {e}")
+            logger.warning(f"[STATS_PUSH] 戰報排入失敗 group={gid}: {e}")
 
     def _watchdog_graduation_push(self):
         """09:05 補推 watchdog：若今日 state 不是 success/in_progress，重跑整個流程。"""

@@ -16,15 +16,14 @@ def test_countdown_days_by_calendar_date():
     assert notify.countdown_days(None, today) is None
 
 
-def test_trips_due_for_countdown_only_milestones_and_not_ended():
+def test_trips_departing_today_skips_other_days_and_ended():
     today = date(2026, 9, 28)
     trips = [
-        {"id": "a", "status": "planning", "start_date": _ts(2026, 10, 5)},   # 7 天 ✓
-        {"id": "b", "status": "planning", "start_date": _ts(2026, 10, 6)},   # 8 天 ✗
-        {"id": "c", "status": "ended", "start_date": _ts(2026, 10, 5)},      # 已結束 ✗
-        {"id": "d", "status": "planning", "start_date": _ts(2026, 9, 28)},   # 當天 ✓
+        {"id": "a", "status": "planning", "start_date": _ts(2026, 10, 5)},   # 7 天後 ✗
+        {"id": "c", "status": "ended", "start_date": _ts(2026, 9, 28)},      # 已結束 ✗
+        {"id": "d", "status": "planning", "start_date": _ts(2026, 9, 28, 23)},  # 當天 ✓
     ]
-    assert [(t["id"], d) for t, d in notify.trips_due_for_countdown(trips, today)] == [("a", 7), ("d", 0)]
+    assert [t["id"] for t in notify.trips_departing_today(trips, today)] == ["d"]
 
 
 def test_on_this_day_trips_same_month_day_past_years():
@@ -44,3 +43,13 @@ def test_announce_badges_skips_when_nothing_new(monkeypatch):
     monkeypatch.setattr(notify, "push_flex", lambda *a: called.append(a) or True)
     assert notify.announce_badges("t1", []) is False
     assert called == []
+
+
+def test_announce_badges_queues_instead_of_pushing(monkeypatch):
+    import travel.trip_crud as crud
+    monkeypatch.setattr(crud, "get_trip", lambda tid: {"id": tid, "group_id": "G", "title": "t", "rarity": "rare"})
+    queued, pushed = [], []
+    monkeypatch.setattr(notify.riders, "enqueue", lambda g, k, m, e: queued.append(g) or True)
+    monkeypatch.setattr(notify, "push_flex", lambda *a: pushed.append(a) or True)
+    assert notify.announce_badges("t1", [{"user_id": "u", "user_name": "A", "badge_name": "x", "badge_rarity": "rare"}])
+    assert queued == ["G"] and pushed == []

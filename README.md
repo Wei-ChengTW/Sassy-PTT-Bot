@@ -1,6 +1,26 @@
 # 八卦分身 (Sassy PTT Bot)
 
-一個模仿 PTT 八卦版 (Gossiping) 風格的 **LINE** 群組機器人。介面有 LINE 對話 + LIFF 旅行回顧前端 + 旅遊擴充模組 + 群組分析儀表板。不提供幫助，只提供毒舌。
+一個模仿 PTT 八卦版 (Gossiping) 風格的 **LINE** 群組機器人。介面有 LINE 對話 + LIFF「畢業紀念冊」前端（群組數據、旅行回憶、個人檔案）+ 旅遊擴充模組 + 群組分析。不提供幫助，只提供毒舌。
+
+## 功能一覽
+
+| 分類 | 功能 | 怎麼用 |
+|------|------|--------|
+| 毒舌對話 | PTT 鄉民口吻隨緣插嘴、被點名精準開酸 | 群組聊天、`@機器人`、私訊 |
+| 群組問答 | 從全部聊天紀錄 + 旅行紀錄找答案，先答再酸 | `@機器人 ？問題`（只打「？」會被嗆） |
+| 聊天摘要 | 摘要你上次講話之後錯過的對話 | `@機器人 現在是怎樣` |
+| G8 偵查器 | 偵測 ji／ju + ba 同音詞（雞巴、居吧…）與 G8／JB | 自動，引用該則訊息回覆 |
+| 統計戰報 | 近 30 天摘要輪播 + 快速選單 | `/stats`、`統計`、`戰報` |
+| 單項排行 | 發言排行、夜貓榜、最佳拍檔、熱門話題 | `/stats 排行`、`/stats 夜貓`、`/stats cp`、`/stats 話題` |
+| 趣味排行榜 | 16 種資料驅動排行（正能量大使、閃電回覆王、冷場王…） | `/stats 排行 <名稱>` |
+| 個人戰績 | 個人數據卡（最佳拍檔、徽章） | `/me` |
+| 紀念冊入口 | 回一張入口卡，直接打開 LIFF | 只 `@機器人` 不打字 |
+| 自動稱號 | 每週依每人最近發言取暫時稱號，機器人稱呼人時會用 | 自動；LIFF「稱號」頁查看 |
+| 精選金句 | 規則挑候選 → LLM 評審選 10 則並配標籤，可分享成小卡 | LIFF「話題」頁 |
+| 旅行與徽章 | 建立旅行、自動算稀有度（5 級）、結束後頒徽章 | LIFF 管理員後台 |
+| 群組通知 | 畢業倒數、出發當天倒數（推播）；頒獎卡、那年今日（附在機器人回覆後面） | 排程自動（見步驟 E） |
+| 出發倒數小卡 | 依按下當下的剩餘天數產生（今天／明天／還有 N 天，久的附週、月換算），以按的人的名義送到群組 | LIFF 旅行詳情頁「發送倒數小卡」 |
+| 管理員戰報 | 週報／月報：所在群組直接回覆，其他群組等下次回話時附上 | `/stats 推播週`、`/stats 推播月` |
 
 ## 核心理念
 
@@ -17,12 +37,13 @@
 | LLM（Fallback） | `gpt-5-mini` via CGU API（Primary 掛掉時自動切換） |
 | LLM 共通 | 15s 單次 timeout + 429 retry 3 次 |
 | 向量資料庫 | ChromaDB（含 PTT 語料與群組對話記憶 `group_memory` 雙 collection） |
-| 嵌入模型 | `sentence-transformers/all-MiniLM-L6-v2` |
+| 嵌入模型 | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`（多語，中文檢索較準） |
 | LINE 框架 | `line-bot-sdk` v3 + Flask webhook |
 | 排程 | APScheduler（每日倒數 / 聚合 / 徽章 + 每週爬蟲 + 每月 LLM 分析） |
 | 後端 | Python 3.11+ |
 | 前端 | Vite + Vue 3 + TypeScript + Tailwind + Pinia + Vue Router |
-| 前端圖表 | Chart.js + vue-chartjs（柱狀 / 圓餅 / 折線）+ D3 v7（力導向網絡圖） |
+| 前端圖表 | Chart.js + vue-chartjs（柱狀 / 圓餅 / 折線）+ D3 v7（力導向網絡圖）+ Leaflet（旅行地圖） |
+| LINE 小卡 | Flex Message（`line_bot/stats_cards.py`、LIFF 端 `utils/flex*.ts`），與 LIFF 同一套紀念冊色票 |
 | 分析儲存 | SQLite（WAL 模式）：訊息、trip、participant、badge、daily / lifetime stats、members |
 
 ### 運作流程（對話引擎）
@@ -35,10 +56,13 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 |------|--------|
 | LINE 私訊（1:1） | 100% |
 | 群組內 `@bot` 直接提及 | 100%（精準對焦問題，不被前文雜訊干擾） |
-| 群組內 bare `@bot`（無其他文字） | 回 LIFF 旅行回顧按鈕 |
-| 群組內 Admin DM | 回 LIFF 管理員後台按鈕 |
-| 群組內含關鍵字（為什麼、怎麼、推薦、股票、感情⋯⋯等 30+ 詞） | 30% 機率 |
-| 群組其他訊息 | 10% 機率隨機發作（短詞附和自動回溯上文主旨插嘴） |
+| `@bot ？問題` / `@bot 現在是怎樣` | 100%，改走群組問答 / 聊天摘要 |
+| 群組內 bare `@bot`（無其他文字） | 回紀念冊入口卡 |
+| 管理員私訊 | 回含管理員後台的入口卡 |
+| 統計指令（`/stats`、`/me`…） | 100%，回 Flex 小卡 |
+| G8 同音詞 | 100%，優先於 LLM |
+| 群組內含關鍵字（為什麼、怎麼、推薦、八卦⋯⋯等 30+ 詞） | 15% 機率 |
+| 群組其他訊息 | 3% 機率隨機發作（短詞附和自動回溯上文主旨插嘴） |
 
 **步驟 B：語料與記憶雙軌檢索 (RAG & Group Memory)**
 
@@ -68,14 +92,24 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 
 **步驟 E：自動排程**
 
-| 排程 | 動作 |
-|------|------|
-| 每日 09:00 | 推播畢業倒數 + 當日 PTT 熱門時事（快取至 `data/news_cache.json`） |
-| 每日 09:05 | watchdog 補推（如果前一天沒推到） |
-| 每日 04:00 | 聚合前一日的 `daily_user_stats` / `user_lifetime_stats` / group-level `daily_stats` |
-| 每小時 :05 | 批次發放已結束旅行的 user-scoped 徽章 |
-| 每月 1 號 03:00 | 對已收集訊息跑 LLM 主題 / 情緒 / 旅行偵測，回寫 `messages` 表 |
-| 每週日 03:00 | 自動爬取最新 PTT 八卦板文章並重建 ChromaDB 索引 |
+| 排程 | 動作 | 方式 |
+|------|------|--------|
+| 每日 09:00 | 推播畢業倒數 + 當日 PTT 熱門時事到 `LINE_GROUP_ID`（快取至 `data/news_cache.json`） | ✔ |
+| 每日 09:05 | watchdog 補推（如果當天沒推到） | ✔ |
+| 每日 00:00 | 旅行出發**當天**的倒數卡，推到該旅行的群組 | ✔ |
+| 每日 00:05 | 那年今日：往年同一天的旅行 + 一年前今天的金句，有內容才排入（當天有效） | 🚌 |
+| 每小時 :05 | 對已結束旅行發徽章，有新徽章才排一張頒獎卡（7 天有效） | 🚌 |
+| 每日 03:30 | 主群新訊息增量寫入 `group_memory` 向量庫 | |
+| 每日 04:00 | 聚合前一日的 `daily_user_stats` / `user_lifetime_stats` / group-level `daily_stats` | |
+| 每日 04:30 | 預先重算精選金句（全部／今年／本月） | |
+| 每月 1 號 03:00 | 對已收集訊息跑 LLM 主題 / 旅行偵測，回寫 `messages` 表 | |
+| 每月 1 號 03:30 | 視窗式情緒分析（只處理新視窗） | |
+| 每週日 03:00 | 自動爬取最新 PTT 八卦板文章並重建 ChromaDB 索引 | |
+| 每週日 04:00 | 自動稱號：替每位成員取暫時稱號寫入 `aliases.json` | |
+
+✔＝推播；🚌＝搭便車：排進 `pending_riders` 佇列，等機器人下次在該群組回覆時接在回覆後面（見 `line_bot/riders.py`）。週報／月報自動排程目前停用，改由管理員 `/stats 推播週`／`/stats 推播月` 手動觸發，同樣走搭便車。
+
+> **推播額度**：LINE 官方帳號免費方案每月 200 則、不能加購。回覆不計額度且一次最多帶 5 則訊息；推播到群組**按群組人數**計（14 人的群推 1 次＝14 則）。所以只有畢業倒數（5 人群，每月約 155 則）與出發當天倒數（每趟 14 則）走推播，其餘通知一律搭便車；聊天摘要逾時回覆失敗時也改排入佇列，不推播。可用 `GET /v2/bot/message/quota/consumption` 查本月用量。
 
 ## 模組總覽
 
@@ -83,14 +117,31 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 
 LINE webhook 主程式，包含 webhook handler、LLM 雙 provider、ChromaDB 查詢、對話歷史、sender 標記。Flask 同時掛載 LIFF API blueprint（後述）。
 
+| 檔案 | 內容 |
+|------|------|
+| `bot.py` | webhook、觸發判定、毒舌生成、G8 偵查器、`/stats` 指令、APScheduler |
+| `group_qa.py` | 群組問答：LLM 抽關鍵字（含日期同義詞）→ SQL 掃全部歷史訊息取視窗 → LLM 依聊天 + 旅行紀錄回答 |
+| `chat_summary.py` | 聊天摘要：從發問者上次講話之後摘要到現在；沒講過話就摘要「最近一輪」（停頓 30 分鐘切輪），少於 10 則直接嗆 |
+| `auto_nickname.py` | 每週自動稱號，寫進 `aliases.json` 的 `auto_aliases`（每人最多 3 個），不在群組公布 |
+| `stats_cards.py` | 所有 Flex 小卡：戰報輪播、各排行榜、個人戰績、入口卡、旅行倒數、頒獎、那年今日 |
+| `notify.py` | 群組通知：出發當天倒數推播；頒獎卡、那年今日排進搭便車佇列（日期一律以台灣時間判斷） |
+| `riders.py` | 搭便車佇列：`reply_message` hook 把群組待送小卡接在回覆後面（最多湊滿 5 則），token 過期放回、卡片不合規丟棄 |
+| `liff_api.py` | `/liff/*` API（後述） |
+
+```bash
+python -m line_bot.auto_nickname --dry-run   # 只印稱號不寫檔
+```
+
 **啟動**：
 ```bash
 ./run_bot.sh                    # 等同：./venv/bin/python line_bot/bot.py
 ```
 
-### 2. LIFF 旅行回顧前端 — `liff/`
+### 2. LIFF 畢業紀念冊 — `liff/`
 
-Vue 3 + Vite 的 LINE 前端框架應用，提供群組儀表板、旅行清單 / 詳情、徽章牆、管理員後台（建立 / 結束旅行、發放徽章），以及 Phase 3 分析頁面（排行榜、互動關係、話題、個人檔案）。所有頁面透過 Vite proxy 把 `/liff/*` 轉發到 bot 的 Flask port 5000。
+Vue 3 + Vite 的 LINE 前端框架應用，以手機為主要裝置。視覺是「畢業紀念冊」：綠色布面封面、燙金、原子筆藍的互動元素，旅行回憶依稀有度做不同的印刷效果（平印／壓紋／燙綠箔／燙金／鐳射箔，鐳射箔可隨手指傾斜）。設計規範見 [`DESIGN.md`](DESIGN.md)，產品定位見 [`PRODUCT.md`](PRODUCT.md)。所有頁面透過 Vite proxy 把 `/liff/*` 轉發到 bot 的 Flask port 5000。
+
+頁面可切換期間（全部時間／單一年份／單一月份），管理員可切換群組；旅行與金句可用 `shareTargetPicker` 分享成 LINE 小卡。
 
 **啟動**：
 ```bash
@@ -101,14 +152,21 @@ npm run build                   # 生產：vue-tsc + vite build → dist/
 ```
 
 **路由總覽**：
-- `/` — DashboardView（總訊息 / 成員數 / 旅行中 / 活躍天數 / Top 話癆 / 訊息類型）
-- `/trips`、`/trips/:id` — TripListView / TripDetailView
-- `/badges` — BadgesView（個人徽章牆）
-- `/leaderboard` — 活躍度排行 + 夜貓子排行 + 類型圓餅圖（Chart.js）
-- `/interactions` — 最佳拍檔 + D3 力導向互動網絡圖
-- `/topics` — 熱門話題 + 情緒曲線
-- `/profile` — 個人總訊息 / 活躍天數 / 時段分佈 / 24h 柱狀圖 / 常聊話題
-- `/admin/*` — 管理員後台（需 `ADMIN_USER_IDS` 通過）
+| 路由 | 頁面 | 內容 |
+|------|------|------|
+| `/` | 群組總覽 | 總訊息、成員、預計進行的行程、活躍天數、Top 5 話癆（佔全群比例）、每週／每月趨勢、活躍熱力圖、訊息類型 |
+| `/leaderboard` | 排行榜 | 16 種趣味排行（第 1 名封面、2–3 名銀銅牌、其餘比例條），支援 `?board=` 直達 |
+| `/pulse` | 群組脈動 | 群組回應速度、閃電神回手排行、話題爆發時段（平均的幾倍）、潛水員偵測 |
+| `/interactions` | 互動關係 | 最佳拍檔 + D3 力導向互動網絡圖 |
+| `/topics` | 話題 | 熱門話題、文字雲、情緒曲線、精選金句（可分享） |
+| `/compare` | 兩人比較 | 任選兩位成員並排比較 |
+| `/nicknames` | 稱號 | 每人的自動稱號與由來，附 LINE 頭像 |
+| `/profile`、`/profile/:userId` | 個人檔案 | 里程碑獎狀、成長／情緒曲線、24h 分佈、社交圈、旅行足跡、徽章 |
+| `/trips`、`/trips/:id` | 旅行 | 預計進行的行程（倒數）＋ 已完成的相簿（距今多久），詳情頁含參與者、統計、分享回顧小卡，還沒出發的可發送倒數小卡 |
+| `/timeline` | 時間軸 | 依年份分章的旅行回憶 |
+| `/map` | 地圖 | Leaflet 旅行足跡 |
+| `/badges` | 徽章牆 | 個人徽章 |
+| `/admin/*` | 管理員後台 | 建立／編輯／結束旅行、參與者、發徽章（會推頒獎卡）、主題分析（需 `ADMIN_USER_IDS`） |
 
 ### 3. 旅遊擴充 — `travel/`
 
@@ -116,15 +174,20 @@ npm run build                   # 生產：vue-tsc + vite build → dist/
 
 包含：
 - `trip_crud.py` — Trip CRUD（建立 / 結束 / 參與者）
-- `badges.py` — 依地點 + 旅行天數 + 參與人數計算稀有度（common / rare / epic / legendary），自動發 emoji 徽章
+- `trip_types.py` — 旅行分類（校園回憶、經典名場面、聚會派對、運動競技、雪地滑雪…）
+- `badges.py` — 依地點 + 旅行天數 + 參與人數計算稀有度（普通 / 稀有 / 極稀有 / 史詩 / 傳說），自動發徽章
 - `aggregator.py` — 每日 / 終身統計聚合
-- `llm_analyzer.py` — 每月 LLM 主題 / 情緒 / 旅行偵測
-- `stats.py` / `stats_extended.py` — Dashboard / Leaderboard / Interactions / Topics / Profile 查詢
+- `llm_analyzer.py` — 每月 LLM 主題 / 旅行偵測
+- `sentiment_windows.py` — 視窗式情緒分析（10 分鐘內最多 4 則帶上下文判情緒）
+- `quotes.py` — 精選金句（規則候選 + LLM 評審，每日快取）
+- `leaderboards.py` — 16 種趣味排行榜
+- `stats.py` / `stats_extended.py` — Dashboard / Leaderboard / Interactions / Topics / Profile / Pulse / Compare 查詢
+- `period.py` / `cache.py` — 期間篩選與 stale-while-revalidate 快取
 
-**API endpoints**（`/liff/*`）：
-- 一般：`/me`、`/dashboard`、`/trips`、`/trips/:id`、`/badges/:user_id`
-- 分析：`/leaderboard`、`/interactions`、`/topics`、`/profile/:user_id`
-- 管理員：`/admin/trips`、`/admin/trips/:id/participants`、`/admin/trips/:id/end`、`/admin/trips/:id/award-badges`
+**API endpoints**（`/liff/*`，全部需 LIFF ID token）：
+- 一般：`/me`、`/dashboard`、`/periods`、`/trips`、`/trips/:id`、`/badges/:user_id`
+- 分析：`/leaderboard`、`/leaderboards`、`/interactions`、`/topics`、`/profile/:user_id`、`/pulse`、`/compare`、`/nicknames`
+- 管理員：`/admin/trips`、`/admin/trips/:id/update`、`/admin/trips/:id/title`、`/admin/trips/:id/participants`、`/admin/trips/:id/end`、`/admin/trips/:id/award-badges`、`/admin/analyze-topics`、`/admin/groups`、`/admin/members`
 
 **啟動**：跟著 `line_bot/bot.py` 一起啟動，不需獨立指令。
 
@@ -147,30 +210,49 @@ python scripts/show_stats.py dashboard          # 群組 dashboard 摘要
 Sassy-PTT-Bot/
 ├── line_bot/
 │   ├── bot.py                  # LINE webhook 主程式 + APScheduler
+│   ├── group_qa.py             # 群組問答
+│   ├── chat_summary.py         # 聊天摘要（錯過的對話）
+│   ├── auto_nickname.py        # 每週自動稱號
+│   ├── stats_cards.py          # Flex 小卡
+│   ├── notify.py               # 旅行倒數／頒獎／那年今日
+│   ├── riders.py               # 搭便車佇列（通知附在回覆後面）
 │   └── liff_api.py             # Flask Blueprint：/liff/* API endpoints
 ├── liff/                       # LIFF 前端（Vue 3 + Vite + Tailwind）
 │   ├── src/
-│   │   ├── views/              # Dashboard / TripList / TripDetail / Badges /
-│   │   │                       # Leaderboard / Interactions / Topics / Profile / Admin
+│   │   ├── views/              # 各頁面（見上方路由表）
+│   │   ├── components/         # PageSign / RankList / FoilCard / RaritySeal / Heatmap…
+│   │   ├── constants/          # rarity.ts（稀有度）、chartColors.ts（圖表色）
+│   │   ├── utils/              # flexTripCard / flexQuoteCard / flexCountdownCard（以本人名義發送的小卡）、ago.ts
 │   │   ├── api/client.ts       # API client wrapper
-│   │   ├── stores/, router.ts, App.vue, main.ts
+│   │   ├── stores/, router.ts, App.vue, main.ts, style.css
 │   ├── package.json            # v5 d3 / chart.js 4 / vue-chartjs 5
 │   └── vite.config.ts          # dev port 5174, proxy /liff → :5000
 ├── travel/                     # 旅遊擴充 + 群組分析
 │   ├── db.py                   # SQLite schema + get_conn() (WAL)
 │   ├── trip_crud.py            # Trip CRUD
+│   ├── trip_types.py           # 旅行分類
 │   ├── badges.py               # 稀有度計算 + 自動發徽章
 │   ├── aggregator.py           # 每日 / 終身 / group-level 聚合
 │   ├── llm_analyzer.py         # 每月 LLM 主題分析
+│   ├── sentiment_windows.py    # 視窗式情緒分析
+│   ├── quotes.py               # 精選金句
+│   ├── leaderboards.py         # 16 種趣味排行榜
 │   ├── line_event_parser.py    # LINE event → SQLite row
 │   ├── stats.py                # Dashboard / Trip / User badge 查詢
-│   ├── stats_extended.py       # Phase 3 分析查詢
+│   ├── stats_extended.py       # 分析查詢
+│   ├── period.py, cache.py     # 期間篩選、快取
 │   └── migrations.py
+├── PRODUCT.md                  # 產品定位（使用者、語氣）
+├── DESIGN.md                   # LIFF 紀念冊設計規範
 ├── corpus_config.py            # 語料與群組記憶設定、別名與重大事件載入
 ├── indexer.py                  # PTT 語料 → ChromaDB 索引
 ├── index_group_memory.py       # 群組歷史對話視窗 → ChromaDB 索引 (group_memory)
 ├── scripts/
 │   ├── import_line_export.py   # LINE 匯出文字紀錄匯入資料庫
+│   ├── import_memories.py      # 匯入群組回憶（冪等去重）
+│   ├── seed_members.py         # 建立成員資料
+│   ├── backfill_analysis.py    # LLM 分析批次回填
+│   ├── backfill_sentiment.py   # 情緒分析批次回填
 │   └── show_stats.py           # CLI 統計工具
 ├── data/                       # 自動產生（git ignored）
 │   ├── chat.db                 # SQLite

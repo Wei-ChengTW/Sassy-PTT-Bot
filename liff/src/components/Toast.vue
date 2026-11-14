@@ -1,7 +1,7 @@
 <template>
   <Transition name="toast">
     <div v-if="toast.state.visible"
-         class="fixed z-[60] bottom-24 inset-x-0 flex justify-center px-4 pointer-events-none">
+         class="fixed z-[60] bottom-[calc(6rem+env(safe-area-inset-bottom,0px))] inset-x-0 flex justify-center px-4 pointer-events-none">
       <div class="max-w-sm w-fit bg-slate-800 text-white text-sm font-medium rounded-md shadow-pop pl-3 pr-4 py-2.5 flex items-center gap-2.5"
            role="status" aria-live="polite">
         <span class="w-2.5 h-2.5 rounded-full shrink-0"

@@ -86,12 +86,13 @@
       <!-- 更多排行榜（資料驅動） -->
       <div v-if="boards.length">
         <SectionHeader title="更多自訂排行榜" />
-        <div class="scroll-row mb-5">
+        <!-- 手機也全部列出（換行），不做橫向捲動 -->
+        <div class="flex flex-wrap gap-1.5 mb-5">
           <button
             v-for="b in boards"
             :key="b.id"
-            @click="(e: MouseEvent) => { selectedId = b.id; (e.currentTarget as HTMLElement).scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' }) }"
-            class="px-3 py-1.5 rounded-md text-xs font-medium border btn-press whitespace-nowrap select-none shrink-0"
+            @click="selectedId = b.id"
+            class="px-3 py-1.5 rounded-md text-xs font-medium border btn-press whitespace-nowrap select-none"
             :class="selectedId === b.id
               ? 'bg-cloth text-white border-cloth'
               : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300'"
@@ -245,7 +246,6 @@ onMounted(async () => {
   if (route.query.board && selectedBoard.value) {
     loading.value = false
     await nextTick()
-    document.querySelector('.scroll-row [aria-pressed="true"]')?.scrollIntoView({ inline: 'center', block: 'nearest' })
     document.getElementById('board-detail')?.scrollIntoView({ block: 'start' })
   }
   loading.value = false

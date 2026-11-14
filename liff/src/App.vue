@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen pb-28 text-slate-900">
+  <div class="min-h-screen pb-[calc(7rem+env(safe-area-inset-bottom,0px))] text-slate-900">
     <!-- 頂部控制列：管理員群組切換 + 期間（與各頁封面帶相連） -->
     <div v-if="auth.initialized" class="sign px-4 pt-2 pb-1 flex items-center gap-3 justify-between">
       <label v-if="auth.role === 'admin'" class="flex items-center gap-2 min-w-0 text-white/90">
@@ -26,7 +26,7 @@
     <!-- 更多：功能選單 -->
     <Transition name="more-sheet">
       <div v-if="showMore" class="fixed inset-0 z-40 bg-slate-950/30" @click.self="showMore = false">
-        <div class="absolute bottom-[72px] inset-x-0 mx-3 bg-white rounded-xl shadow-pop border border-slate-200 overflow-hidden"
+        <div class="absolute bottom-[calc(72px+env(safe-area-inset-bottom,0px))] inset-x-0 mx-3 max-h-[calc(100dvh-72px-env(safe-area-inset-bottom,0px)-24px)] overflow-y-auto overscroll-contain bg-white rounded-xl shadow-pop border border-slate-200"
              role="dialog" aria-label="更多功能">
           <div class="flex items-center justify-between px-4 py-2.5 border-b border-slate-200">
             <p class="text-sm font-bold text-slate-900">更多功能</p>

@@ -39,7 +39,8 @@
           <dd class="font-bold text-slate-900">
             {{ { ended: '已圓滿結束', upcoming: '規劃中', ongoing: '進行中' }[tripPhase(detail.trip)] }}
             <span v-if="tripAgo(detail.trip)" class="ml-1.5 text-sm font-bold text-accent-700">· {{ tripAgo(detail.trip) }}</span>
-            <span v-else-if="daysUntil(detail.trip) !== null" class="ml-1.5 text-sm font-bold text-accent-700">· 還有 <span class="font-num">{{ daysUntil(detail.trip) }}</span> 天</span>
+            <span v-else-if="daysLeft === 0" class="ml-1.5 text-sm font-bold text-accent-700">· 今天出發</span>
+            <span v-else-if="daysLeft !== null" class="ml-1.5 text-sm font-bold text-accent-700">· 還有 <span class="font-num">{{ daysLeft }}</span> 天</span>
           </dd>
         </div>
         <div class="flex px-4 py-3 gap-4">
@@ -68,6 +69,18 @@
 
       <!-- Action buttons -->
       <div class="space-y-2 mt-6">
+        <!-- 出發倒數：還沒出發（或今天出發）才有，以按的人的名義送到群組 -->
+        <button
+          v-if="daysLeft !== null"
+          @click="onSendCountdown"
+          :disabled="sending"
+          class="w-full bg-cloth text-white rounded-md py-3.5 font-bold disabled:opacity-60 btn-press flex items-center justify-center gap-2"
+        >
+          <svg v-if="!sending" class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M3 9h18M8 2v4M16 2v4" /></svg>
+          <svg v-else class="w-[18px] h-[18px] animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" stroke-opacity="0.3" /><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
+          <span v-if="sending">小卡發送中…</span>
+          <span v-else>發送倒數小卡<span class="font-normal text-[#C9D3CC] ml-1.5">{{ daysLeft === 0 ? '今天出發' : daysLeft === 1 ? '明天出發' : `還有 ${daysLeft} 天` }}</span></span>
+        </button>
         <button
           @click="onShare"
           :disabled="sharing"
@@ -101,6 +114,7 @@ import RaritySeal from '@/components/RaritySeal.vue'
 import { rarityOf } from '@/constants/rarity'
 import { useAuthStore } from '@/stores/auth'
 import { buildTripFlex } from '@/utils/flexTripCard'
+import { buildCountdownFlex, daysUntilDeparture } from '@/utils/flexCountdownCard'
 import { shareFlexMessage } from '@/utils/liffShare'
 import { useToast } from '@/composables/useToast'
 import BaseCard from '@/components/BaseCard.vue'
@@ -115,6 +129,29 @@ const detail = ref<any>(null)
 const loading = ref(true)
 const error = ref('')
 const sharing = ref(false)
+const sending = ref(false)
+
+const daysLeft = computed(() => {
+  const t = detail.value?.trip
+  if (!t || tripPhase(t) === 'ended') return null
+  return daysUntilDeparture(t.start_date)
+})
+
+async function onSendCountdown() {
+  if (!detail.value || sending.value) return
+  const msg = buildCountdownFlex(detail.value.trip)   // 按下當下重算天數
+  if (!msg) return
+  sending.value = true
+  try {
+    const res = await shareFlexMessage(msg)
+    if (res.success) toast.success('已發送倒數小卡')
+    else if (res.mode === 'picker') toast.error('已取消發送')
+  } catch (e: any) {
+    toast.error(e?.message || '發送失敗，請稍後再試')
+  } finally {
+    sending.value = false
+  }
+}
 
 async function onShare() {
   if (!detail.value || sharing.value) return
@@ -153,9 +190,4 @@ onMounted(async () => {
   }
   finally { loading.value = false }
 })
-
-function daysUntil(t: any): number | null {
-  if (tripPhase(t) !== 'upcoming' || !t.start_date) return null
-  return Math.max(1, Math.ceil((t.start_date * 1000 - Date.now()) / 86400000))
-}
 </script>

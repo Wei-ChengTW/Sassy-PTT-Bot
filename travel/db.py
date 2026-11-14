@@ -125,6 +125,19 @@ CREATE TABLE IF NOT EXISTS api_cache (
     payload TEXT NOT NULL,
     computed_at INTEGER NOT NULL
 );
+
+-- 搭便車小卡：非必要的群組通知不推播，等機器人下次在該群組回覆時附上（見 line_bot.riders）
+CREATE TABLE IF NOT EXISTS pending_riders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id TEXT NOT NULL,
+    rider_key TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    delivered_at INTEGER,
+    UNIQUE (group_id, rider_key)
+);
+CREATE INDEX IF NOT EXISTS idx_pending_riders_group ON pending_riders(group_id, delivered_at);
 """
 
 

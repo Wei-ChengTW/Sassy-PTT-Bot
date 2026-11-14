@@ -400,7 +400,7 @@ def admin_award_badges(trip_id):
     if not _is_admin(user_id):
         return _forbid("not_admin")
     awarded = award_badges_for_trip(trip_id)
-    # 有新發出的徽章就在群組推頒獎卡（背景執行，不拖慢回應）
+    # 有新發出的徽章就排頒獎卡，下次機器人在群組回覆時附上（背景執行，不拖慢回應）
     if awarded:
         from line_bot.notify import announce_badges
         _threading.Thread(target=announce_badges, args=(trip_id, awarded), daemon=True).start()
