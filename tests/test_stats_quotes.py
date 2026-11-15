@@ -97,3 +97,12 @@ def test_parse_curation_filters_unknown_ids_and_caps_person():
     assert [c["id"] for c in out] == [1, 2, 4]
     assert out[0]["label"] == "💀 社死現場" and out[1]["label"] is None
     assert parse_curation("不是 JSON", pool) == []
+
+
+def test_quotes_exclude_personal_info():
+    from travel.stats_extended import _is_quote_worthy
+    for text in ("新北市汐止區東勢街201巷106弄21號", "我家在中山路 12 號 3 樓", "打給我 0912-345-678",
+                 "市話 02-23456789", "寄到 abc@gmail.com", "身分證 A123456789", "帳號：abc 密碼：xyz"):
+        assert not _is_quote_worthy(text), text
+    for text in ("我有男朋友 我不演了", "其實我有不小心講21歲", "黃金我要做多還是做空 All_in", "第3名就好", "他今天才知道12號有沒有空"):
+        assert _is_quote_worthy(text), text

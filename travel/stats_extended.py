@@ -11,6 +11,15 @@ from travel.period import period_filter
 _QUOTE_MIN_LEN = 4                  # 至少 4 字，擋掉「真的」「笑死」等短附和
 _URL_PREFIX_RE = re.compile(r"^https?://", re.IGNORECASE)
 _PLACEHOLDER_RE = re.compile(r"^\[[^\[\]]{1,8}\]$")
+# 個資：地址（…路/街/巷/弄 + 數字號）、帳號密碼、手機／市話、Email、身分證字號 —— 不能當金句公開或分享
+_PERSONAL_INFO_RE = re.compile(
+    r"(?:[路街段巷弄]\s*\d+\s*(?:巷|弄|號|樓))"
+    r"|(?:密碼|帳號\s*[:：])"
+    r"|(?:09\d{2}[-\s]?\d{3}[-\s]?\d{3})"
+    r"|(?:0\d{1,2}[-\s]?\d{6,8})"
+    r"|(?:[\w.+-]+@[\w-]+\.[\w.]+)"
+    r"|(?:\b[A-Z][12]\d{8}\b)"
+)
 _NOISE_QUOTES = {
     "哈哈哈哈", "呵呵呵呵", "哈哈哈笑死",
     "嗯嗯嗯", "哦哦哦", "好喔好喔", "真的真的",
@@ -18,7 +27,7 @@ _NOISE_QUOTES = {
 
 
 def _is_quote_worthy(content) -> bool:
-    """金句基本過濾：有實質文字（≥4 字）、非純網址、非 [貼圖] 佔位符。"""
+    """金句基本過濾：有實質文字（≥4 字）、非純網址、非 [貼圖] 佔位符、不含地址電話等個資。"""
     if not content:
         return False
     text = content.strip()
@@ -29,6 +38,8 @@ def _is_quote_worthy(content) -> bool:
     if _PLACEHOLDER_RE.match(text):
         return False
     if text in _NOISE_QUOTES:
+        return False
+    if _PERSONAL_INFO_RE.search(text):
         return False
     return True
 
