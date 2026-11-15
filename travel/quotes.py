@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from travel.db import get_conn
 from travel.period import period_filter
 
-QUOTES_MODEL = os.getenv("QUOTES_MODEL", "gemini-3.8-flash-high")
+QUOTES_MODEL = os.getenv("QUOTES_MODEL", "glm-5.3")
 QUOTES_TTL = 86400            # LLM 評審結果快取一天
 
 MAX_LEN = 80                  # 超過視為長篇複製文
@@ -171,7 +171,7 @@ def _curate(pool: list[dict]) -> list[dict]:
     from openai import AsyncOpenAI
 
     async def call():
-        async with AsyncOpenAI(base_url=os.getenv("CLI_PROXY_BASE_URL", "http://localhost:8317/v1"),
+        async with AsyncOpenAI(base_url=os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1"),
                                api_key=os.getenv("CLI_PROXY_API_KEY", "")) as client:
             resp = await client.chat.completions.create(
                 model=QUOTES_MODEL, temperature=0.7, max_completion_tokens=4000, timeout=60,

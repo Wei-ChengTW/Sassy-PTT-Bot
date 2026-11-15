@@ -113,8 +113,8 @@ async def _generate(prompt: str) -> str | None:
     messages = [{"role": "user", "content": prompt}]
     # 呼叫時才讀 env：以 script 執行時 .env 在 import 之後才載入
     providers = (
-        (os.getenv("CLI_PROXY_BASE_URL", "http://localhost:8317/v1"), os.getenv("CLI_PROXY_API_KEY", ""),
-         os.getenv("NICKNAME_MODEL", "gemini-3.1-pro-low")),
+        (os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1"), os.getenv("CLI_PROXY_API_KEY", ""),
+         os.getenv("NICKNAME_MODEL", "deepseek-v4.1-flash")),
         (os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1"), os.getenv("CGU_LLM_API_KEY", ""),
          os.getenv("CGU_LLM_MODEL", "gpt-5-mini")),
     )

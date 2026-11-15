@@ -11,10 +11,10 @@ from openai import AsyncOpenAI
 
 from travel.db import get_conn
 
-PRIMARY_BASE = os.getenv("CLI_PROXY_BASE_URL", "http://localhost:8317/v1")
+PRIMARY_BASE = os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1")
 PRIMARY_KEY = os.getenv("CLI_PROXY_API_KEY", "")
 # 話題分析專用（與聊天的 PRIMARY_MODEL 分開）；3.8-flash-high 實測比 3.7 快約 20%、玩笑判讀一樣準
-PRIMARY_MODEL = os.getenv("ANALYZER_MODEL", "gemini-3.8-flash-high")
+PRIMARY_MODEL = os.getenv("ANALYZER_MODEL", "deepseek-v4.1-flash")
 FALLBACK_BASE = os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
 FALLBACK_KEY = os.getenv("CGU_LLM_API_KEY", "")
 FALLBACK_MODEL = os.getenv("CGU_LLM_MODEL", "gpt-5-mini")

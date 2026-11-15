@@ -9,7 +9,7 @@ import random
 import re
 from datetime import datetime, timedelta, timezone
 
-SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "gemini-3.8-flash-high")
+SUMMARY_MODEL = os.getenv("SUMMARY_MODEL", "deepseek-v4.1-flash")
 
 SUMMARY_TRIGGER = "現在是怎樣"
 _TRAILING_PUNCT_RE = re.compile(r"[\s?？!！.。~～]+$")

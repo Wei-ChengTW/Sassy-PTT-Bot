@@ -68,6 +68,11 @@ CLI_PROXY_API_KEY = os.getenv("CLI_PROXY_API_KEY", "")
 PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gemini-3.6-flash-high")
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "15.0"))
 
+# 備援供應商（未設定時沿用 CGU 舊設定，保持向下相容）
+FALLBACK_BASE_URL = os.getenv("FALLBACK_BASE_URL") or CGU_BASE_URL
+FALLBACK_API_KEY = os.getenv("FALLBACK_API_KEY") or CGU_API_KEY
+FALLBACK_MODEL = os.getenv("FALLBACK_MODEL") or CGU_MODEL_NAME
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from corpus_config import (
     CHROMA_DB_PATH,
@@ -325,13 +330,13 @@ class SassyBrain:
         else:
             self.primary_client = None
             logger.warning("[LLM] CLIProxyAPI 未設定，primary 停用")
-        if CGU_API_KEY:
-            self.fallback_client = AsyncOpenAI(api_key=CGU_API_KEY, base_url=CGU_BASE_URL)
-            self.fallback_model = CGU_MODEL_NAME
-            logger.info(f"[LLM] Fallback: {CGU_MODEL_NAME} @ {CGU_BASE_URL}")
+        if FALLBACK_API_KEY:
+            self.fallback_client = AsyncOpenAI(api_key=FALLBACK_API_KEY, base_url=FALLBACK_BASE_URL)
+            self.fallback_model = FALLBACK_MODEL
+            logger.info(f"[LLM] Fallback: {FALLBACK_MODEL} @ {FALLBACK_BASE_URL}")
         else:
             self.fallback_client = None
-            logger.warning("[LLM] CGU_LLM_API_KEY 未設定，fallback 停用")
+            logger.warning("[LLM] Fallback 未設定（FALLBACK_API_KEY / CGU_LLM_API_KEY 皆空），fallback 停用")
         self._llm_sem = threading.Semaphore(2)       # @mention / 私訊排隊用（並發 2 兼顧同時兩人與避免觸發 429 限流）
         self._spontaneous_lock = threading.Lock()    # 隨機觸發防並發重疊
 

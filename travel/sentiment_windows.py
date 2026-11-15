@@ -18,9 +18,9 @@ from openai import AsyncOpenAI
 from travel.db import get_conn
 from corpus_config import GROUP_WINDOW_GAP_SEC, GROUP_MIN_WINDOW_CHARS
 
-BASE = os.getenv("CLI_PROXY_BASE_URL", "http://localhost:8317/v1")
+BASE = os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1")
 KEY = os.getenv("CLI_PROXY_API_KEY", "")
-MODEL = os.getenv("SENTIMENT_MODEL", "gemini-3.1-pro-low")
+MODEL = os.getenv("SENTIMENT_MODEL", "deepseek-v4.1-flash")
 WINDOWS_PER_CALL = 12
 # 情緒專用的較小視窗（不動 corpus_config 的群組記憶視窗）：視窗越小越不稀釋單則情緒。
 WINDOW_MAX_MSGS = int(os.getenv("SENTIMENT_WINDOW_MAX", "4"))
