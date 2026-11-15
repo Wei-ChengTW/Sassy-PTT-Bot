@@ -95,3 +95,15 @@ def test_get_conn_uses_wal_mode(temp_db):
     with get_conn() as conn:
         row = conn.execute("PRAGMA journal_mode").fetchone()
     assert row[0].lower() == "wal"
+
+def test_invalidate_on_deploy_keeps_quotes(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "c.db"))
+    from travel.db import init_db
+    from travel.migrations import migrate
+    from travel.cache import _write, _read, invalidate_on_deploy
+    init_db(); migrate()
+    _write("dashboard:G:all", {"a": 1})
+    _write("quotes:G:all", [1])
+    assert invalidate_on_deploy() == 1
+    assert _read("dashboard:G:all") is None
+    assert _read("quotes:G:all") is not None

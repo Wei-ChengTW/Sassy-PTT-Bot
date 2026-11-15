@@ -84,3 +84,14 @@ def invalidate(group_id: str | None = None) -> None:
             conn.execute("DELETE FROM api_cache WHERE cache_key LIKE ?", (f"%:{group_id}:%",))
         else:
             conn.execute("DELETE FROM api_cache")
+
+
+def invalidate_on_deploy(keep: tuple[str, ...] = ("quotes",)) -> int:
+    """bot 啟動時呼叫：清掉舊程式算的快取，改版後重啟立刻生效。
+
+    keep 的種類（如金句，重算要叫 LLM）保留。回傳刪除筆數。
+    """
+    with get_conn() as conn:
+        where = " AND ".join("cache_key NOT LIKE ?" for _ in keep) or "1=1"
+        cur = conn.execute(f"DELETE FROM api_cache WHERE {where}", tuple(f"{k}:%" for k in keep))
+        return cur.rowcount

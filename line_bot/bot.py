@@ -372,6 +372,8 @@ class SassyBrain:
                 init_db()
                 migrate()
                 logger.info("[TRAVEL] SQLite 已初始化並完成 migration")
+                from travel.cache import invalidate_on_deploy
+                logger.info(f"[CACHE] 清除舊版快取 {invalidate_on_deploy()} 筆（保留金句）")
             except Exception as e:
                 logger.error(f"[TRAVEL] SQLite init 失敗: {e}")
         else:
