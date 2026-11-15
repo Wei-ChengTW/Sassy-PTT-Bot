@@ -6,21 +6,20 @@
 
 - run_sentiment_backfill(group_id=None, only_null=True, ...)：排程與腳本共用入口。
   only_null=True 時只處理「整個視窗都尚未評分」的視窗 → 增量、冪等、便宜。
-- 模型由 SENTIMENT_MODEL 環境變數決定（預設 gemini-3.1-pro-low）。
+- 模型由 SENTIMENT_MODEL 環境變數決定（預設 gpt-6.1-sol）。
 """
 import asyncio
 import json
 import os
 import time
 
-from openai import AsyncOpenAI
+from llm_keys import cgu_chat
 
 from travel.db import get_conn
 from corpus_config import GROUP_WINDOW_GAP_SEC, GROUP_MIN_WINDOW_CHARS
 
-BASE = os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1")
-KEY = os.getenv("CLI_PROXY_API_KEY", "")
-MODEL = os.getenv("SENTIMENT_MODEL", "deepseek-v4.1-flash")
+# CGU 的 key 由 llm_keys 分配（ANALYSIS_API_KEY 優先，額度／限流時換別把）
+MODEL = os.getenv("SENTIMENT_MODEL", "gpt-6.1-sol")
 WINDOWS_PER_CALL = 12
 # 情緒專用的較小視窗（不動 corpus_config 的群組記憶視窗）：視窗越小越不稀釋單則情緒。
 WINDOW_MAX_MSGS = int(os.getenv("SENTIMENT_WINDOW_MAX", "4"))
@@ -97,15 +96,12 @@ def build_windows(group_id: str, only_null: bool) -> list[dict]:
     return out
 
 
-async def _score_batch(client, batch):
+async def _score_batch(batch):
     blocks = "\n\n".join(f"=== 視窗 id={w['id']} ===\n{w['text']}" for w in batch)
-    resp = await client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": PROMPT.format(blocks=blocks)}],
-        temperature=0.2,
-        max_completion_tokens=2000,
-    )
-    raw = resp.choices[0].message.content.strip()
+    raw = (await cgu_chat(
+        "analysis", model=MODEL, messages=[{"role": "user", "content": PROMPT.format(blocks=blocks)}],
+        temperature=0.2, max_completion_tokens=4000,
+    )).strip()
     if raw.startswith("```"):
         raw = raw.split("```", 2)[1]
         if raw.startswith("json"):
@@ -154,30 +150,29 @@ async def _run_group(group_id: str, only_null: bool, concurrency: int) -> dict:
     sem = asyncio.Semaphore(concurrency)
     done = {"written": 0, "failed": 0, "first_error": None}
 
-    async with AsyncOpenAI(base_url=BASE, api_key=KEY) as client:
-        async def worker(batch):
-            async with sem:
-                results = None
-                for attempt in range(2):   # 失敗重試一次（多半是限流或 JSON 被截斷）
-                    try:
-                        results = await _score_batch(client, batch)
-                        break
-                    except Exception as e:
-                        if attempt == 1:
-                            done["failed"] += 1
-                            done["first_error"] = done["first_error"] or repr(e)[:200]
-                if results is None:
-                    return   # 沒寫 sentiment_at → 下次 only_null 重跑會補
-            done["written"] += await asyncio.to_thread(_write, id_to_msgids, results)
+    async def worker(batch):
+        async with sem:
+            results = None
+            for attempt in range(2):   # 失敗重試一次（多半是限流或 JSON 被截斷）
+                try:
+                    results = await _score_batch(batch)
+                    break
+                except Exception as e:
+                    if attempt == 1:
+                        done["failed"] += 1
+                        done["first_error"] = done["first_error"] or repr(e)[:200]
+            if results is None:
+                return   # 沒寫 sentiment_at → 下次 only_null 重跑會補
+        done["written"] += await asyncio.to_thread(_write, id_to_msgids, results)
 
-        await asyncio.gather(*(worker(b) for b in batches))
+    await asyncio.gather(*(worker(b) for b in batches))
     if done["failed"]:
         print(f"[SENTIMENT] {group_id[:12]}… 失敗 {done['failed']}/{len(batches)} 批（重跑會補）：{done['first_error']}")
     return {"group": group_id, "windows": len(windows), "written": done["written"]}
 
 
 def run_sentiment_backfill(group_id: str | None = None, only_null: bool = True,
-                           concurrency: int = 8) -> int:
+                           concurrency: int = 2) -> int:
     """情緒回填入口（同步）。group_id=None → 所有群。回傳寫入訊息數。
 
     only_null=True（排程預設）：只評分尚未有任何 sentiment 的視窗，增量且冪等。

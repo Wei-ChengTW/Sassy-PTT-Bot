@@ -426,6 +426,8 @@ def admin_analyze_topics():
         try:
             run_recent_analysis()
             run_sentiment_backfill(group_id or None)   # only_null：只補還沒評的情緒視窗
+            from travel.quotes import warm_highlight_quotes
+            warm_highlight_quotes(group_id or None)     # 金句候選要有情緒分數，補完就重選
         finally:
             _analysis_lock.release()
 
@@ -555,7 +557,19 @@ def interactions():
     err = _require_member(user_id, group_id)
     if err:
         return err
-    return jsonify(get_interaction_data(group_id, request.args.get("period", "all")))
+    data = dict(get_interaction_data(group_id, request.args.get("period", "all")))
+    data["network_nodes"] = _with_node_pictures(group_id, data.get("network_nodes") or [])
+    return jsonify(data)
+
+
+def _with_node_pictures(group_id: str, nodes: list[dict]) -> list[dict]:
+    """網絡圖節點附上 LINE 大頭貼（並行抓、各自快取 6 小時）；不改動快取裡的原資料。"""
+    from concurrent.futures import ThreadPoolExecutor
+    if not nodes:
+        return nodes
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        pics = list(pool.map(lambda n: _get_member_picture(group_id, n.get("id", "")), nodes))
+    return [{**n, "picture_url": pic} for n, pic in zip(nodes, pics)]
 
 
 @liff_bp.route("/topics")

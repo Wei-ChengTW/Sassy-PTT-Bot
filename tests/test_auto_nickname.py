@@ -41,3 +41,16 @@ def test_parse_rejects_bad_output():
     assert parse_nickname_response('{"name": "", "reason": "x"}') is None
     assert parse_nickname_response('{"name": "這個稱號實在是太長了超過十個字", "reason": "x"}') is None
     assert parse_nickname_response('{"name": "短", "reason": ""}') is None
+
+
+def test_build_prompt_lists_names_given_this_round():
+    from line_bot.auto_nickname import build_prompt
+    prompt = build_prompt("A", {"aliases": []}, ["哈哈"], 7, given=["史萊姆金幣乞丐"])
+    assert "史萊姆金幣乞丐" in prompt
+    assert "不要撞名" in build_prompt("A", {}, ["哈哈"], 7, given=["X"])
+    assert "不要撞名" not in build_prompt("A", {}, ["哈哈"], 7)
+
+
+def test_build_prompt_requires_noun_title():
+    from line_bot.auto_nickname import build_prompt
+    assert "這位＿＿" in build_prompt("A", {}, ["哈哈"], 7)

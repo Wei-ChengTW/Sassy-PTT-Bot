@@ -9,16 +9,18 @@ from typing import Any
 
 from openai import AsyncOpenAI
 
+from llm_keys import cgu_chat
 from travel.db import get_conn
 
-PRIMARY_BASE = os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1")
-PRIMARY_KEY = os.getenv("CLI_PROXY_API_KEY", "")
-# 話題分析專用（與聊天的 PRIMARY_MODEL 分開）；3.8-flash-high 實測比 3.7 快約 20%、玩笑判讀一樣準
-PRIMARY_MODEL = os.getenv("ANALYZER_MODEL", "deepseek-v4.1-flash")
-FALLBACK_BASE = os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
-FALLBACK_KEY = os.getenv("CGU_LLM_API_KEY", "")
-FALLBACK_MODEL = os.getenv("CGU_LLM_MODEL", "gpt-5-mini")
+# CGU 的 key 由 llm_keys 分配（ANALYSIS_API_KEY 優先，額度／限流時換別把）
+# 話題分析專用（與聊天的 PRIMARY_MODEL 分開）
+PRIMARY_MODEL = os.getenv("ANALYZER_MODEL", "gpt-6.1-sol")
+FALLBACK_BASE = os.getenv("FALLBACK_BASE_URL", "https://raygoai.cc/v1")
+FALLBACK_KEY = os.getenv("FALLBACK_API_KEY", "")
+FALLBACK_MODEL = os.getenv("FALLBACK_LIGHT_MODEL", "deepseek-v4.1-flash")
 BATCH_SIZE = 50
+# 一批 50 則的 JSON 約 4,000 token；2,000 會被截斷（gemma 會照上限截斷、解析失敗）
+MAX_OUTPUT_TOKENS = 8000
 
 PROMPT_TEMPLATE = """分析以下 LINE 群組訊息（多則），每則輸出 JSON。
 欄位：
@@ -83,14 +85,10 @@ async def analyze_batch(messages: list[dict]) -> list[dict]:
     last_err = None
 
     try:
-        client = AsyncOpenAI(base_url=PRIMARY_BASE, api_key=PRIMARY_KEY)
-        resp = await client.chat.completions.create(
-            model=PRIMARY_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_completion_tokens=2000,
-        )
-        return parse_llm_response(resp.choices[0].message.content)
+        return parse_llm_response(await cgu_chat(
+            "analysis", model=PRIMARY_MODEL, messages=[{"role": "user", "content": prompt}],
+            temperature=0.3, max_completion_tokens=MAX_OUTPUT_TOKENS,
+        ))
     except Exception as e:
         last_err = e
 
@@ -100,7 +98,7 @@ async def analyze_batch(messages: list[dict]) -> list[dict]:
             model=FALLBACK_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_completion_tokens=2000,
+            max_completion_tokens=MAX_OUTPUT_TOKENS,
         )
         return parse_llm_response(resp.choices[0].message.content)
 
@@ -160,7 +158,7 @@ def write_analysis_results(results: list[dict]) -> int:
 
 
 async def analyze_pending(since_ms: int | None = None, limit: int | None = None,
-                          concurrency: int = 8, newest_first: bool = True) -> int:
+                          concurrency: int = 2, newest_first: bool = True) -> int:
     """把待分析訊息切成 BATCH_SIZE 一批、並發送 LLM，逐批寫回。可中斷續跑。回傳寫入則數。"""
     import asyncio
 
@@ -215,14 +213,10 @@ async def _keyword_batch(messages: list[dict]) -> list[dict]:
     )
     last_err = None
     try:
-        client = AsyncOpenAI(base_url=PRIMARY_BASE, api_key=PRIMARY_KEY)
-        resp = await client.chat.completions.create(
-            model=PRIMARY_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_completion_tokens=2000,
-        )
-        return parse_llm_response(resp.choices[0].message.content)
+        return parse_llm_response(await cgu_chat(
+            "analysis", model=PRIMARY_MODEL, messages=[{"role": "user", "content": prompt}],
+            temperature=0.3, max_completion_tokens=MAX_OUTPUT_TOKENS,
+        ))
     except Exception as e:
         last_err = e
     if FALLBACK_KEY:
@@ -231,7 +225,7 @@ async def _keyword_batch(messages: list[dict]) -> list[dict]:
             model=FALLBACK_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_completion_tokens=2000,
+            max_completion_tokens=MAX_OUTPUT_TOKENS,
         )
         return parse_llm_response(resp.choices[0].message.content)
     raise RuntimeError(f"LLM 全部失敗: {last_err}")

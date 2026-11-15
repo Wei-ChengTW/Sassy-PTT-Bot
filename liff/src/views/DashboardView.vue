@@ -77,6 +77,7 @@
                   {{ data.health.overall }}<span class="text-base text-slate-500 font-medium">/100</span>
                 </p>
                 <p class="text-xs text-slate-500 mt-1.5">綜合分數</p>
+                <p v-if="data.health.window" class="text-[11px] text-slate-400 mt-0.5">{{ data.health.window }}，跟之前比<br>平常＝70</p>
               </div>
               <div class="flex-1 min-w-0" style="max-height:180px">
                 <Radar :data="healthRadarData" :options="healthRadarOptions" style="max-height:180px" />
@@ -284,7 +285,7 @@ const seasonOptions = {
 }
 
 const HEALTH_LABELS: Record<string, string> = {
-  activity: '活躍度', diversity: '多樣性', sentiment: '正面情緒', participation: '參與度',
+  activity: '活躍度', diversity: '多樣性', sentiment: '情緒', participation: '參與度',
 }
 
 const healthRadarData = computed(() => {

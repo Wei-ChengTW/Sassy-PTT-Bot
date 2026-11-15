@@ -131,9 +131,43 @@ function drawGraph() {
         d.fx = null; d.fy = null
       }))
 
+  // 圓圈裡放 LINE 頭像（圓形裁切）；沒有頭像就顯示名字第一個字
+  const defs = svg.append('defs')
+  nodes.forEach((d: any, i: number) => {
+    d._clip = `node-clip-${i}`
+    defs.append('clipPath').attr('id', d._clip)
+      .append('circle').attr('r', rScale(d.message_count))
+  })
+
   node.append('circle')
     .attr('r', (d: any) => rScale(d.message_count))
     .attr('fill', '#ffffff')
+
+  node.filter((d: any) => !d.picture_url)
+    .append('text')
+    .text((d: any) => (d.name || d.id).slice(0, 1))
+    .attr('text-anchor', 'middle')
+    .attr('dy', '0.35em')
+    .attr('font-size', (d: any) => rScale(d.message_count) * 0.9)
+    .attr('font-family', '"Noto Sans TC", sans-serif')
+    .attr('font-weight', '700')
+    .attr('fill', '#1E3A2F')
+    .attr('pointer-events', 'none')
+
+  node.filter((d: any) => !!d.picture_url)
+    .append('image')
+    .attr('href', (d: any) => d.picture_url)
+    .attr('x', (d: any) => -rScale(d.message_count))
+    .attr('y', (d: any) => -rScale(d.message_count))
+    .attr('width', (d: any) => rScale(d.message_count) * 2)
+    .attr('height', (d: any) => rScale(d.message_count) * 2)
+    .attr('preserveAspectRatio', 'xMidYMid slice')
+    .attr('clip-path', (d: any) => `url(#${d._clip})`)
+    .attr('pointer-events', 'none')
+
+  node.append('circle')
+    .attr('r', (d: any) => rScale(d.message_count))
+    .attr('fill', 'transparent')
     .attr('stroke', '#1E3A2F')
     .attr('stroke-width', 3)
     .attr('class', 'cursor-grab active:cursor-grabbing')

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from travel.db import get_conn
 from travel.period import period_filter
 
-QUOTES_MODEL = os.getenv("QUOTES_MODEL", "glm-5.3")
+QUOTES_MODEL = os.getenv("QUOTES_MODEL", "gpt-6.1-sol")
 QUOTES_TTL = 86400            # LLM 評審結果快取一天
 
 MAX_LEN = 80                  # 超過視為長篇複製文
@@ -166,18 +166,16 @@ def fetch_candidates(group_id: str, period: str) -> list[dict]:
 
 
 def _curate(pool: list[dict]) -> list[dict]:
-    """呼叫 Gemini 選金句；任何失敗回 []（呼叫端退回規則版）。"""
+    """呼叫 LLM 評審選金句；任何失敗回 []（呼叫端退回規則版）。"""
     import asyncio
-    from openai import AsyncOpenAI
+
+    from llm_keys import cgu_chat
 
     async def call():
-        async with AsyncOpenAI(base_url=os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1"),
-                               api_key=os.getenv("CLI_PROXY_API_KEY", "")) as client:
-            resp = await client.chat.completions.create(
-                model=QUOTES_MODEL, temperature=0.7, max_completion_tokens=4000, timeout=60,
-                messages=[{"role": "user", "content": build_curate_prompt(pool)}],
-            )
-            return resp.choices[0].message.content
+        return await cgu_chat(
+            "jobs", model=QUOTES_MODEL, temperature=0.7, max_completion_tokens=4000, timeout=60,
+            messages=[{"role": "user", "content": build_curate_prompt(pool)}],
+        )
     try:
         return parse_curation(asyncio.run(call()), pool)
     except Exception as e:

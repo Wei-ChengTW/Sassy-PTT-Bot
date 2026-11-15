@@ -6,12 +6,12 @@
 每則訊息的 sentiment 欄位——既有 AVG(sentiment) WHERE NOT NULL 的聚合自動變乾淨。
 
 - 純事務/無明顯情緒的視窗 → sentiment 留 NULL（不再塞 0，避免稀釋平均）。
-- 模型：預設 gemini-3.1-pro-low（Gemini pro 階，語感優於 flash）。
+- 模型：預設 gpt-6.1-sol；key 用 ANALYSIS_API_KEY（見 llm_keys.py）。
 - 冪等/可續跑：--only-null 只補尚未被視窗覆蓋的；預設全量覆寫。
 
 用法：
     DB_PATH=data/chat.db python scripts/backfill_sentiment.py --sample 15
-    DB_PATH=data/chat.db python scripts/backfill_sentiment.py --concurrency 12
+    DB_PATH=data/chat.db python scripts/backfill_sentiment.py --concurrency 2
 """
 import argparse
 import asyncio
@@ -31,9 +31,9 @@ from corpus_config import (  # noqa: E402
     MAIN_GROUP_ID, GROUP_WINDOW_GAP_SEC, GROUP_WINDOW_MAX_MSGS, GROUP_MIN_WINDOW_CHARS,
 )
 
-BASE = os.getenv("CLI_PROXY_BASE_URL", "http://localhost:8317/v1")
-KEY = os.getenv("CLI_PROXY_API_KEY", "")
-MODEL = os.getenv("SENTIMENT_MODEL", "gemini-3.1-pro-low")
+BASE = os.getenv("CLI_PROXY_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
+KEY = os.getenv("ANALYSIS_API_KEY") or os.getenv("CLI_PROXY_API_KEY", "")
+MODEL = os.getenv("SENTIMENT_MODEL", "gpt-6.1-sol")
 WINDOWS_PER_CALL = 12
 
 PROMPT = """你是台灣年輕人 LINE 群組的情緒分析員。以下是多段連續對話（同一時段的視窗）。
@@ -106,7 +106,7 @@ async def score_batch(client, batch):
         model=MODEL,
         messages=[{"role": "user", "content": PROMPT.format(blocks=blocks)}],
         temperature=0.2,
-        max_completion_tokens=2000,
+        max_completion_tokens=4000,
     )
     raw = resp.choices[0].message.content.strip()
     if raw.startswith("```"):

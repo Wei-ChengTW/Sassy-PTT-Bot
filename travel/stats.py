@@ -21,10 +21,9 @@ def get_dashboard_data(group_id: str, days: int = 30, period: str = "all") -> di
             f"SELECT COUNT(DISTINCT user_id) FROM messages WHERE group_id=?{pf} AND user_id NOT LIKE 'imported:%'",
             (group_id, *pp),
         ).fetchone()[0]
-        # 進行中＝還沒按結束、且開始日已到（規劃中的未來旅程不算）
+        # 預計進行＝還沒按結束（還沒出發的、正在進行的都算），對應總覽卡片「預計進行的行程」
         active_trips = conn.execute(
-            """SELECT COUNT(*) FROM trips WHERE group_id=? AND status='planning'
-                 AND start_date <= CAST(strftime('%s', 'now') AS INTEGER)""", (group_id,)
+            "SELECT COUNT(*) FROM trips WHERE group_id=? AND status='planning'", (group_id,)
         ).fetchone()[0]
         active_days = conn.execute(
             f"""SELECT COUNT(DISTINCT date(timestamp/1000, 'unixepoch', 'localtime'))
@@ -83,7 +82,7 @@ def get_dashboard_data(group_id: str, days: int = 30, period: str = "all") -> di
 
         monthly_trend, seasonality = _monthly_and_seasonality(conn, group_id, period)
 
-        health = _compute_group_health(conn, group_id, pf, pp)
+        health = _compute_group_health(conn, group_id, period)
         weekly_trend = _compute_weekly_trend(conn, group_id)
 
         # 旅行類型分佈：展開所有 trips 的 trip_type（JSON 陣列）計數
@@ -119,89 +118,131 @@ def get_dashboard_data(group_id: str, days: int = 30, period: str = "all") -> di
     }
 
 
-def _compute_group_health(conn, group_id: str, pf: str, pp: list) -> dict:
-    """群組健康度：活躍度 / 多樣性 / 情緒 / 參與度 綜合 0-100 分。
+_DAY_MS = 86_400_000
+HEALTH_RECENT_DAYS = 30        # 選「全部時間」時看最近幾天
+HEALTH_BASELINE_FACTOR = 3     # 基準＝比較區間之前、幾倍長度的時間
+HEALTH_NORMAL = 70             # 「跟平常一樣」的分數
+DIVERSITY_SAMPLE = 300         # 多樣性固定抽幾個關鍵字，避免資料量多寡影響結果
+MIN_SENTIMENT_MSGS = 30        # 情緒有評分的訊息少於此數就不算
+MIN_ACTIVE_MSGS = 3            # 參與度：區間內至少發言幾則才算有參與
+MIN_KEYWORD_COVERAGE = 0.5     # 文字訊息有一半以上分析過，多樣性才算（分析跑到一半時不準）
 
-    情緒分項在無 sentiment 資料時自動略過（不列入加權）。分項門檻產生中文建議。
-    活躍度、多樣性、參與度皆套用傳入的 period 過濾（pf/pp）。
-    """
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM messages WHERE group_id=?{pf}", (group_id, *pp)
-    ).fetchone()[0]
-    active_days = conn.execute(
-        f"""SELECT COUNT(DISTINCT date(timestamp/1000,'unixepoch','localtime'))
-           FROM messages WHERE group_id=?{pf}""",
-        (group_id, *pp),
-    ).fetchone()[0] or 0
-    active_senders = conn.execute(
-        f"SELECT COUNT(DISTINCT user_id) FROM messages WHERE group_id=?{pf} AND user_id NOT LIKE 'imported:%'",
-        (group_id, *pp),
-    ).fetchone()[0] or 0
 
-    # 活躍度：活躍日的日均訊息
-    daily_avg = total / active_days if active_days else 0.0
-    activity_score = min(100.0, daily_avg * 10)
+def _clamp(x: float) -> float:
+    return max(0.0, min(100.0, x))
 
-    # 多樣性：不同話題數（解析 topics JSON）
-    topic_rows = conn.execute(
-        f"""SELECT topics FROM messages
-           WHERE group_id=?{pf} AND topics IS NOT NULL AND topics != '[]'""",
-        (group_id, *pp),
-    ).fetchall()
-    distinct_topics: set[str] = set()
-    for r in topic_rows:
+
+def _health_window(period: str, now_ms: int) -> tuple[int, int, str]:
+    """回傳 (start_ms, end_ms, 說明)。全部時間 → 最近 30 天；進行中的期間截到現在。"""
+    from travel.period import parse_period
+    start, end = parse_period(period)
+    if start is None:
+        return now_ms - HEALTH_RECENT_DAYS * _DAY_MS, now_ms, f"最近 {HEALTH_RECENT_DAYS} 天"
+    end = min(end, now_ms)
+    return start, end, period
+
+
+def _keyword_spread(rows) -> float | None:
+    """固定間隔抽 DIVERSITY_SAMPLE 個關鍵字，回傳不重複的比例；不夠多回 None。"""
+    kws: list[str] = []
+    for r in rows:
         try:
-            for t in json.loads(r["topics"]):
-                distinct_topics.add(t)
+            kws.extend(k for k in json.loads(r[0]) if isinstance(k, str))
         except (json.JSONDecodeError, TypeError):
             pass
-    diversity_score = min(100.0, len(distinct_topics) * 10)
+    if len(kws) < DIVERSITY_SAMPLE:
+        return None
+    step = len(kws) / DIVERSITY_SAMPLE
+    sample = [kws[int(i * step)] for i in range(DIVERSITY_SAMPLE)]
+    return len(set(sample)) / DIVERSITY_SAMPLE
 
-    # 情緒：AVG(sentiment) → 0-100（無資料則 None）
-    avg_sentiment = conn.execute(
-        f"""SELECT AVG(sentiment) FROM messages
-           WHERE group_id=?{pf} AND sentiment IS NOT NULL""",
-        (group_id, *pp),
-    ).fetchone()[0]
-    sentiment_score = (avg_sentiment + 1) * 50 if avg_sentiment is not None else None
 
-    # 參與度：活躍發言者 / 名冊總數（名冊為空時退回以發言者為分母 → 100%）
-    roster = conn.execute(
-        "SELECT COUNT(*) FROM members WHERE group_id=?", (group_id,)
-    ).fetchone()[0] or 0
-    denom = roster if roster else active_senders
-    participation_score = min(100.0, (active_senders / denom * 100)) if denom else 0.0
-
-    # 加權（情緒缺席時按比例重新分配權重）
-    weights = {"activity": 0.30, "diversity": 0.25, "sentiment": 0.25, "participation": 0.20}
-    scores = {
-        "activity": activity_score,
-        "diversity": diversity_score,
-        "sentiment": sentiment_score,
-        "participation": participation_score,
+def _range_stats(conn, group_id: str, start: int, end: int) -> dict:
+    """某段時間的每日訊息量、關鍵字分散度、平均情緒。"""
+    base = "FROM messages WHERE group_id=? AND timestamp>=? AND timestamp<? AND user_id NOT LIKE 'imported:%'"
+    args = (group_id, start, end)
+    n = conn.execute(f"SELECT COUNT(*) {base}", args).fetchone()[0]
+    sent_avg, sent_n = conn.execute(
+        f"SELECT AVG(sentiment), COUNT(sentiment) {base} AND sentiment IS NOT NULL", args).fetchone()
+    kw_rows = conn.execute(
+        f"SELECT keywords {base} AND keywords IS NOT NULL AND keywords != '[]' ORDER BY timestamp", args).fetchall()
+    text_n = conn.execute(f"SELECT COUNT(*) {base} AND type='text' AND length(content)>1", args).fetchone()[0]
+    covered = text_n and len(kw_rows) / text_n >= MIN_KEYWORD_COVERAGE
+    days = max((end - start) / _DAY_MS, 1.0)
+    return {
+        "per_day": n / days,
+        "msgs": n,
+        "spread": _keyword_spread(kw_rows) if covered else None,
+        "sentiment": sent_avg if sent_n >= MIN_SENTIMENT_MSGS else None,
     }
+
+
+def _compute_group_health(conn, group_id: str, period: str = "all", now_ms: int | None = None) -> dict | None:
+    """群組健康度：每一項都跟群組自己的過去比，「跟平常一樣」＝ 70 分。
+
+    - 比較區間：選全部時間看最近 30 天，選年／月看該期間；基準是它之前 3 倍長度的時間。
+    - 活躍度：每日訊息量 ÷ 基準，一樣 70、多一倍 100、少一半 40。
+    - 多樣性：固定抽 300 個關鍵字的不重複比例 ÷ 基準（多 15% → 約 100）。
+    - 情緒：平均情緒 − 基準，+0.15 → 100、−0.15 → 40。
+    - 參與度：名冊上區間內發言 ≥ 3 則的人的比例（絕對值，不跟過去比）。
+    資料不足的分項為 None、不列入加權；全部都不足回 None。
+    """
+    import math
+    now_ms = now_ms or int(time.time() * 1000)
+    start, end, label = _health_window(period, now_ms)
+    length = end - start
+    if length <= 0:
+        return None
+    cur = _range_stats(conn, group_id, start, end)
+    base = _range_stats(conn, group_id, start - HEALTH_BASELINE_FACTOR * length, start)
+
+    activity = None
+    if cur["msgs"] and base["per_day"] > 0:
+        activity = _clamp(HEALTH_NORMAL + 30 * math.log2(cur["per_day"] / base["per_day"]))
+    elif cur["msgs"] == 0:
+        activity = 0.0
+
+    diversity = None
+    if cur["spread"] is not None and base["spread"]:
+        diversity = _clamp(HEALTH_NORMAL + 200 * (cur["spread"] / base["spread"] - 1))
+
+    sentiment = None
+    if cur["sentiment"] is not None and base["sentiment"] is not None:
+        sentiment = _clamp(HEALTH_NORMAL + 200 * (cur["sentiment"] - base["sentiment"]))
+
+    roster = conn.execute("SELECT COUNT(*) FROM members WHERE group_id=?", (group_id,)).fetchone()[0] or 0
+    counts = [r[0] for r in conn.execute(
+        """SELECT COUNT(*) FROM messages WHERE group_id=? AND timestamp>=? AND timestamp<?
+             AND user_id NOT LIKE 'imported:%' GROUP BY user_id""", (group_id, start, end))]
+    denom = roster or len(counts)
+    participation = _clamp(sum(c >= MIN_ACTIVE_MSGS for c in counts) / denom * 100) if denom else None
+
+    weights = {"activity": 0.30, "diversity": 0.25, "sentiment": 0.25, "participation": 0.20}
+    scores = {"activity": activity, "diversity": diversity, "sentiment": sentiment, "participation": participation}
     present = {k: v for k, v in scores.items() if v is not None}
-    wsum = sum(weights[k] for k in present) or 1.0
-    overall = sum(scores[k] * weights[k] for k in present) / wsum
+    if not present:
+        return None
+    overall = sum(v * weights[k] for k, v in present.items()) / sum(weights[k] for k in present)
 
     suggestions: list[str] = []
-    if participation_score < 60:
+    if activity is not None and activity < 50:
+        suggestions.append("聊天量比平常少，試著開個新話題")
+    if participation is not None and participation < 60:
         suggestions.append("多鼓勵潛水員發言")
-    if diversity_score < 50:
-        suggestions.append("增加話題多樣性")
-    if sentiment_score is not None and sentiment_score < 50:
-        suggestions.append("群組氣氛偏低，試著帶點正能量")
-    if activity_score < 40:
-        suggestions.append("互動偏少，試著開啟新話題")
+    if diversity is not None and diversity < 50:
+        suggestions.append("最近都在聊同幾件事，換點新話題")
+    if sentiment is not None and sentiment < 50:
+        suggestions.append("氣氛比平常低迷，帶點正能量")
     if not suggestions:
-        suggestions.append("群組狀態健康，繼續保持！")
+        suggestions.append("跟平常差不多或更好，繼續保持！" if overall < 85 else "最近特別熱絡，繼續保持！")
 
     return {
         "overall": round(overall),
-        "activity": round(activity_score),
-        "diversity": round(diversity_score),
-        "sentiment": round(sentiment_score) if sentiment_score is not None else None,
-        "participation": round(participation_score),
+        "activity": round(activity) if activity is not None else None,
+        "diversity": round(diversity) if diversity is not None else None,
+        "sentiment": round(sentiment) if sentiment is not None else None,
+        "participation": round(participation) if participation is not None else None,
+        "window": label,
         "suggestions": suggestions,
     }
 

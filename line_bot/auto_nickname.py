@@ -69,15 +69,22 @@ def parse_nickname_response(raw: str | None) -> dict | None:
     return {"name": name, "reason": reason}
 
 
-def build_prompt(member: str, entry: dict, lines: list[str], days: int) -> str:
+def build_prompt(member: str, entry: dict, lines: list[str], days: int,
+                 given: list[str] | None = None) -> str:
+    """given：這一輪已經發給其他人的稱號，避免好幾個人拿到同一個。"""
     taken = entry.get("aliases", []) + [a["name"] for a in entry.get("auto_aliases", [])]
+    given_line = (f"這週已經發給別人的稱號（不要撞名，也不要只換一兩個字）：{'、'.join(given)}\n"
+                  if given else "")
     return (
         f"你是一個嘴很賤的 PTT 鄉民，要幫 LINE 群組成員「{member}」取一個本週的暫時稱號。\n"
-        f"他已經有的外號（不要重複）：{'、'.join(taken) or '（無）'}\n\n"
+        f"他已經有的外號（不要重複）：{'、'.join(taken) or '（無）'}\n"
+        f"{given_line}\n"
         f"以下是他最近 {days} 天在群組的發言：\n" + "\n".join(lines) + "\n\n"
         "要求：\n"
         f"1. 稱號 2～{MAX_NAME_CHARS} 個字，只能從上面這段期間的發言裡具體的事、口頭禪或行為發想，"
         "不要拿以前的舊梗；好笑、有梗，可以酸但不要人身攻擊外貌或家人。\n"
+        "   稱號是用來「叫這個人」的名詞，要能接在「這位＿＿」後面，例如「XX王」「XX仔」「XX戰神」「XX本人」「XX受害者」；"
+        "不能是動作、事件或狀態（像「狂買宵夜」「報告寫不完」就不是稱號，要改成「宵夜狂買王」「報告永遠寫不完仔」）。\n"
         "2. 上面只有他本人的發言，看不到別人講什麼：他提到的人、幫別人出的主意、在討論的八卦不一定是在講他自己，"
         "不確定是不是他本人的事就不要拿來用。\n"
         f"3. reason 用第三人稱、一句話（{MAX_REASON_CHARS} 字內）說明由來，引用他這段期間說過的話或做過的事。\n"
@@ -112,11 +119,16 @@ def _fetch_lines(conn, group_id: str, user_name: str, since_ms: int) -> list[str
 async def _generate(prompt: str) -> str | None:
     messages = [{"role": "user", "content": prompt}]
     # 呼叫時才讀 env：以 script 執行時 .env 在 import 之後才載入
+    from llm_keys import cgu_chat
+    model = os.getenv("NICKNAME_MODEL", "gpt-6.1-sol")
+    try:   # CGU：JOBS_API_KEY 優先，額度／限流時換別把
+        return await cgu_chat("jobs", model=model, messages=messages, temperature=1.0,
+                              max_completion_tokens=4000, timeout=90)
+    except Exception as e:
+        logger.warning(f"[NICKNAME] {model} 失敗: {e}")
     providers = (
-        (os.getenv("CLI_PROXY_BASE_URL", "https://raygoai.cc/v1"), os.getenv("CLI_PROXY_API_KEY", ""),
-         os.getenv("NICKNAME_MODEL", "deepseek-v4.1-flash")),
-        (os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1"), os.getenv("CGU_LLM_API_KEY", ""),
-         os.getenv("CGU_LLM_MODEL", "gpt-5-mini")),
+        (os.getenv("FALLBACK_BASE_URL", "https://raygoai.cc/v1"), os.getenv("FALLBACK_API_KEY", ""),
+         os.getenv("FALLBACK_MODEL", "deepseek-v4-pro")),
     )
     for base, key, model in providers:
         if not key:
@@ -164,8 +176,15 @@ def run_weekly_nicknames(dry_run: bool = False) -> list[dict]:
             if days is None:
                 continue
             lines = _fetch_lines(conn, group_id, member, now_ms - days * _DAY_MS)
-            raw = asyncio.run(_generate(build_prompt(member, aliases[member], lines, days)))
+            given = [r["name"] for r in results]
+            raw = asyncio.run(_generate(build_prompt(member, aliases[member], lines, days, given)))
             parsed = parse_nickname_response(raw)
+            if parsed and parsed["name"] in given:
+                logger.warning(f"[NICKNAME] {member} 撞名「{parsed['name']}」，重取一次")
+                parsed = parse_nickname_response(
+                    asyncio.run(_generate(build_prompt(member, aliases[member], lines, days, given))))
+                if parsed and parsed["name"] in given:
+                    parsed = None
             if not parsed:
                 logger.warning(f"[NICKNAME] {member} 解析失敗: {raw!r:.200}")
                 continue

@@ -14,8 +14,8 @@ import random
 import re
 from datetime import datetime, timedelta, timezone
 
-QA_MODEL = os.getenv("QA_MODEL", "deepseek-v4.1-flash")                    # 回答
-QA_INTENT_MODEL = os.getenv("QA_INTENT_MODEL", "deepseek-v4.1-flash")      # 抽關鍵字，要快
+QA_MODEL = os.getenv("QA_MODEL", "gpt-6.1-sol")                    # 回答
+QA_INTENT_MODEL = os.getenv("QA_INTENT_MODEL", "gpt-6.1-sol")      # 抽關鍵字
 
 RECENT_MSGS = 15          # 補前後文用的最近訊息數
 RADIUS = 8                # 命中點前後各取幾則

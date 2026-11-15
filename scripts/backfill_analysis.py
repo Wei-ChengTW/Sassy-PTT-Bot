@@ -6,7 +6,7 @@ scripts/backfill_sentiment.py 的視窗式分析負責）。可隨時中斷續�
 
 用法：
     DB_PATH=data/chat.db python scripts/backfill_analysis.py
-    DB_PATH=data/chat.db python scripts/backfill_analysis.py --concurrency 8 --limit 500
+    DB_PATH=data/chat.db python scripts/backfill_analysis.py --concurrency 2 --limit 500
 """
 import argparse
 import asyncio
@@ -23,7 +23,7 @@ from travel.llm_analyzer import analyze_pending  # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--concurrency", type=int, default=8)
+    ap.add_argument("--concurrency", type=int, default=2)
     ap.add_argument("--limit", type=int, default=None, help="只處理前 N 則（測試用）")
     ap.add_argument("--since", type=int, default=None, help="只撈此 timestamp (ms) 之後的訊息")
     args = ap.parse_args()

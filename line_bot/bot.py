@@ -59,19 +59,17 @@ except ImportError:
 
 # --- 3. 配置 ---
 
-CGU_API_KEY = os.getenv("CGU_LLM_API_KEY")
-CGU_BASE_URL = os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
-CGU_MODEL_NAME = os.getenv("CGU_LLM_MODEL", "gemma-4-26b-a4b-it")
-
-CLI_PROXY_BASE_URL = os.getenv("CLI_PROXY_BASE_URL", "")
+# Primary：CGU MercuryAPI，品質優先全部用 gpt-6.1-sol；key 依任務分工見 llm_keys.py
+CLI_PROXY_BASE_URL = os.getenv("CLI_PROXY_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
 CLI_PROXY_API_KEY = os.getenv("CLI_PROXY_API_KEY", "")
-PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gemini-3.6-flash-high")
+PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gpt-6.1-sol")
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "15.0"))
 
-# 備援供應商（未設定時沿用 CGU 舊設定，保持向下相容）
-FALLBACK_BASE_URL = os.getenv("FALLBACK_BASE_URL") or CGU_BASE_URL
-FALLBACK_API_KEY = os.getenv("FALLBACK_API_KEY") or CGU_API_KEY
-FALLBACK_MODEL = os.getenv("FALLBACK_MODEL") or CGU_MODEL_NAME
+# 備援：不同供應商的 DeepSeek。強用途用 v4-pro，背景工作（如問答抽關鍵字）用 v4.1-flash
+FALLBACK_BASE_URL = os.getenv("FALLBACK_BASE_URL", "https://raygoai.cc/v1")
+FALLBACK_API_KEY = os.getenv("FALLBACK_API_KEY", "")
+FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "deepseek-v4-pro")
+FALLBACK_LIGHT_MODEL = os.getenv("FALLBACK_LIGHT_MODEL", "deepseek-v4.1-flash")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from corpus_config import (
@@ -313,7 +311,7 @@ GROUP_ALIAS_MAP, GROUP_ALIAS_META = _get_group_alias_data()
 
 class SassyBrain:
     def __init__(self):
-        logger.info(f"正在喚醒八卦分身 (primary={PRIMARY_MODEL}, fallback={CGU_MODEL_NAME})")
+        logger.info(f"正在喚醒八卦分身 (primary={PRIMARY_MODEL}, fallback={FALLBACK_MODEL})")
         self.emb_fn = embedding_functions.SentenceTransformerEmbeddingFunction(model_name=EMBEDDING_MODEL_NAME)
         self.chroma = chromadb.PersistentClient(path=CHROMA_DB_PATH)
         self._refresh_ptt_collection()
@@ -322,21 +320,24 @@ class SassyBrain:
             name=GROUP_MEMORY_COLLECTION,
             embedding_function=self.emb_fn
         )
-        # Primary: CLIProxyAPI 本機 proxy（Gemini 3.6 Flash），失敗 fallback 到 CGU
-        if CLI_PROXY_BASE_URL and CLI_PROXY_API_KEY:
-            self.primary_client = AsyncOpenAI(api_key=CLI_PROXY_API_KEY, base_url=CLI_PROXY_BASE_URL)
-            self.primary_model = PRIMARY_MODEL
-            logger.info(f"[LLM] Primary: {PRIMARY_MODEL} @ {CLI_PROXY_BASE_URL}")
+        # Primary：CHAT_API_KEY 優先，額度／限流時換別把 CGU key（見 llm_keys）；全失敗再 fallback 到 FALLBACK_*
+        from llm_keys import key_pool
+        chat_keys = key_pool("chat")
+        self.primary_model = PRIMARY_MODEL
+        self.primary_clients = [AsyncOpenAI(api_key=k, base_url=CLI_PROXY_BASE_URL) for k in chat_keys]
+        if self.primary_clients:
+            self.primary_client = self.primary_clients[0]
+            logger.info(f"[LLM] Primary: {PRIMARY_MODEL} @ {CLI_PROXY_BASE_URL}（{len(chat_keys)} 把 key 輪替）")
         else:
             self.primary_client = None
-            logger.warning("[LLM] CLIProxyAPI 未設定，primary 停用")
+            logger.warning("[LLM] CLI_PROXY_API_KEY 未設定，primary 停用")
         if FALLBACK_API_KEY:
             self.fallback_client = AsyncOpenAI(api_key=FALLBACK_API_KEY, base_url=FALLBACK_BASE_URL)
             self.fallback_model = FALLBACK_MODEL
             logger.info(f"[LLM] Fallback: {FALLBACK_MODEL} @ {FALLBACK_BASE_URL}")
         else:
             self.fallback_client = None
-            logger.warning("[LLM] Fallback 未設定（FALLBACK_API_KEY / CGU_LLM_API_KEY 皆空），fallback 停用")
+            logger.warning("[LLM] FALLBACK_API_KEY 未設定，fallback 停用")
         self._llm_sem = threading.Semaphore(2)       # @mention / 私訊排隊用（並發 2 兼顧同時兩人與避免觸發 429 限流）
         self._spontaneous_lock = threading.Lock()    # 隨機觸發防並發重疊
 
@@ -445,33 +446,27 @@ class SassyBrain:
             )
 
             if os.getenv("TRAVEL_STORAGE_ENABLED", "true").lower() == "true":
-                from travel.llm_analyzer import run_monthly_analysis
+                from travel.llm_analyzer import run_recent_analysis
+                from travel.sentiment_windows import run_sentiment_backfill
                 from travel.aggregator import run_daily_aggregation
 
-                self._scheduler.add_job(
-                    run_monthly_analysis,
-                    trigger='cron',
-                    day=1,
-                    hour=3,
-                    minute=0,
-                    id='monthly_llm_analysis',
-                    misfire_grace_time=3600,
-                    coalesce=True,
-                )
-                logger.info("[ANALYZER] 每月 1 號 03:00 LLM 分析排程已啟動")
+                def run_daily_analysis():
+                    # 先補主題／關鍵字，再補情緒視窗（都只處理新訊息）；04:00 聚合、04:30 金句會用到
+                    try:
+                        run_recent_analysis()
+                    finally:
+                        run_sentiment_backfill()
 
-                from travel.sentiment_windows import run_sentiment_backfill
                 self._scheduler.add_job(
-                    run_sentiment_backfill,  # only_null=True：只評分新視窗（增量）
+                    run_daily_analysis,
                     trigger='cron',
-                    day=1,
-                    hour=3,
+                    hour=2,
                     minute=30,
-                    id='monthly_sentiment_windows',
+                    id='daily_llm_analysis',
                     misfire_grace_time=3600,
                     coalesce=True,
                 )
-                logger.info("[SENTIMENT] 每月 1 號 03:30 視窗情緒分析排程已啟動")
+                logger.info("[ANALYZER] 每日 02:30 主題／情緒分析排程已啟動")
 
                 self._scheduler.add_job(
                     run_daily_aggregation,
@@ -965,7 +960,7 @@ class SassyBrain:
                     fetch_summary_messages(chat_id, before_ts)[-QA_RECENT_MSGS:], with_date=True)
                 intent = parse_intent(asyncio.run(self._generate_with_fallback(
                     build_intent_messages(question, recent, today),
-                    tag="QA_INTENT", primary_model=QA_INTENT_MODEL,
+                    tag="QA_INTENT", primary_model=QA_INTENT_MODEL, fallback_model=FALLBACK_LIGHT_MODEL,
                     max_tokens=_QA_INTENT_MAX_TOKENS, timeout=_QA_INTENT_TIMEOUT,
                 )), question)
                 keywords = expand_date_keywords(intent["keywords"], intent["question"])
@@ -1530,9 +1525,10 @@ class SassyBrain:
         return [t["text"] for t in history if t["role"] == "bot"][-n:]
 
     async def _call_provider(self, client, model, messages, tag: str,
-                             max_tokens: int = 128, timeout: float = LLM_TIMEOUT) -> str | None:
-        """呼叫單一 provider，含 429 retry 與 timeout。失敗回 None。"""
-        for attempt in range(3):
+                             max_tokens: int = 128, timeout: float = LLM_TIMEOUT,
+                             errors: list | None = None, retry_429: bool = True) -> str | None:
+        """呼叫單一 provider，含 429 retry 與 timeout。失敗回 None，例外附到 errors。"""
+        for attempt in range(3 if retry_429 else 1):
             try:
                 resp = await client.chat.completions.create(
                     model=model,
@@ -1544,7 +1540,9 @@ class SassyBrain:
                 return resp.choices[0].message.content or ""
             except Exception as e:
                 err = str(e)
-                if "429" in err and attempt < 2:
+                if errors is not None:
+                    errors.append(e)
+                if "429" in err and retry_429 and attempt < 2:
                     logger.warning(f"[{tag}] 429 rate limit，2s 後重試 (attempt {attempt+1})")
                     await asyncio.sleep(2)
                 elif "timeout" in err.lower() or "timed out" in err.lower():
@@ -1556,21 +1554,31 @@ class SassyBrain:
         return None
 
     async def _generate_with_fallback(self, messages, tag: str = "LLM", primary_model: str | None = None,
-                                      max_tokens: int = 128, timeout: float = LLM_TIMEOUT) -> str | None:
-        """先試 primary（CLIProxyAPI），失敗 fallback 到 CGU。回 None 表示兩邊都掛。"""
+                                      max_tokens: int = 128, timeout: float = LLM_TIMEOUT,
+                                      fallback_model: str | None = None) -> str | None:
+        """先試 primary，失敗 fallback 到備援供應商。回 None 表示兩邊都掛。"""
         if self.primary_client:
+            from llm_keys import is_key_problem
             model = primary_model or self.primary_model
-            raw = await self._call_provider(self.primary_client, model, messages, "PRIMARY",
-                                            max_tokens=max_tokens, timeout=timeout)
-            if raw is not None:
-                logger.info(f"[{tag}] PRIMARY 成功 ({model})")
-                return raw
+            clients = getattr(self, "primary_clients", None) or [self.primary_client]
+            for i, client in enumerate(clients):
+                errors: list = []
+                last_key = i == len(clients) - 1
+                raw = await self._call_provider(client, model, messages, "PRIMARY", max_tokens=max_tokens,
+                                                timeout=timeout, errors=errors, retry_429=last_key)
+                if raw is not None:
+                    logger.info(f"[{tag}] PRIMARY 成功 ({model}{f'，第 {i + 1} 把 key' if i else ''})")
+                    return raw
+                if last_key or not (errors and is_key_problem(errors[-1])):
+                    break   # timeout／模型錯誤：換 key 也沒用，直接 fallback
+                logger.warning(f"[{tag}] 第 {i + 1} 把 key 額度／限流，換下一把")
             logger.warning(f"[{tag}] PRIMARY 失敗，嘗試 fallback")
         if self.fallback_client:
-            raw = await self._call_provider(self.fallback_client, self.fallback_model, messages, "FALLBACK",
+            fb_model = fallback_model or self.fallback_model
+            raw = await self._call_provider(self.fallback_client, fb_model, messages, "FALLBACK",
                                             max_tokens=max_tokens, timeout=timeout)
             if raw is not None:
-                logger.info(f"[{tag}] FALLBACK 成功 ({self.fallback_model})")
+                logger.info(f"[{tag}] FALLBACK 成功 ({fb_model})")
                 return raw
             logger.error(f"[{tag}] FALLBACK 也失敗")
         return None

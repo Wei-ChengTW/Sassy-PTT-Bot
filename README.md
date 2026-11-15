@@ -33,13 +33,13 @@
 
 | 元件 | 技術 |
 |------|------|
-| LLM（Primary） | 任一 OpenAI 相容端點（`CLI_PROXY_BASE_URL`），依用途分模型：對話／問答／摘要／金句用 `gpt-6.1-sol`，分析／情緒／稱號／問答關鍵字用免費的 `gemma-4-26b-a4b-it` |
-| LLM（Fallback） | 不同供應商的 `deepseek-v4.1-flash`（`FALLBACK_*`），Primary 掛掉時自動切換；分析與稱號則退回 `CGU_LLM_*` |
+| LLM（Primary） | CGU MercuryAPI（`CLI_PROXY_BASE_URL`，OpenAI 相容），所有用途都用旗艦 `gpt-6.1-sol`；三把 key 依任務分工（聊天／背景分析／金句與稱號），額度或限流時自動換另一把（`llm_keys.py`） |
+| LLM（Fallback） | 不同供應商的 DeepSeek（`FALLBACK_*`），Primary 掛掉時自動切換：強用途用 `deepseek-v4-pro`，背景工作用 `deepseek-v4.1-flash` |
 | LLM 共通 | 單次 timeout（`LLM_TIMEOUT`，目前 25s）+ 429 retry 3 次 |
 | 向量資料庫 | ChromaDB（含 PTT 語料與群組對話記憶 `group_memory` 雙 collection） |
 | 嵌入模型 | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`（多語，中文檢索較準） |
 | LINE 框架 | `line-bot-sdk` v3 + Flask webhook |
-| 排程 | APScheduler（每日倒數 / 聚合 / 徽章 + 每週爬蟲 + 每月 LLM 分析） |
+| 排程 | APScheduler（每日倒數 / LLM 分析 / 聚合 / 徽章 + 每週爬蟲與稱號） |
 | 後端 | Python 3.11+ |
 | 前端 | Vite + Vue 3 + TypeScript + Tailwind + Pinia + Vue Router |
 | 前端圖表 | Chart.js + vue-chartjs（柱狀 / 圓餅 / 折線）+ D3 v7（力導向網絡圖）+ Leaflet（旅行地圖） |
@@ -86,7 +86,7 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 **步驟 D：LLM 雙 Provider**
 
 - 先試 **PRIMARY**（`CLI_PROXY_BASE_URL` + 該用途的模型，見下表），timeout 為 `LLM_TIMEOUT`
-- 失敗（timeout / 連線錯誤 / 全部 429 重試耗盡）→ 自動切到 **FALLBACK**（`FALLBACK_BASE_URL` / `FALLBACK_MODEL`，建議用不同供應商，避免同時掛掉；沒設時沿用 `CGU_LLM_*`）
+- 失敗（timeout / 連線錯誤 / 全部 429 重試耗盡）→ 自動切到 **FALLBACK**（`FALLBACK_BASE_URL`，用不同供應商，避免同時掛掉）
 - 兩邊都掛 → 回「懶得理你，自己想。」
 - 觸發 semaphore：`@mention` 走 2-slot semaphore（避免 reply_token 過期），自發觸發走 `non-blocking lock`（搶不到就跳過）
 
@@ -98,14 +98,22 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 | `QA_MODEL` | 群組問答的回答 | `gpt-6.1-sol` |
 | `SUMMARY_MODEL` | 聊天摘要 | `gpt-6.1-sol` |
 | `QUOTES_MODEL` | 精選金句 LLM 評審 | `gpt-6.1-sol` |
-| `QA_INTENT_MODEL` | 群組問答抽關鍵字（要快） | `gemma-4-26b-a4b-it` |
-| `ANALYZER_MODEL` | 每月主題／旅行偵測 | `gemma-4-26b-a4b-it` |
-| `SENTIMENT_MODEL` | 視窗式情緒分析 | `gemma-4-26b-a4b-it` |
-| `NICKNAME_MODEL` | 每週自動稱號 | `gemma-4-26b-a4b-it` |
-| `FALLBACK_MODEL` | 對話／問答／摘要備援 | `deepseek-v4.1-flash` |
-| `CGU_LLM_MODEL` | 分析與稱號的備援 | `gpt-6-luna` |
+| `QA_INTENT_MODEL` | 群組問答抽關鍵字 | `gpt-6.1-sol` |
+| `ANALYZER_MODEL` | 每日主題／關鍵字／旅行偵測 | `gpt-6.1-sol` |
+| `SENTIMENT_MODEL` | 每日視窗式情緒分析 | `gpt-6.1-sol` |
+| `NICKNAME_MODEL` | 每週自動稱號 | `gpt-6.1-sol` |
+| `FALLBACK_MODEL` | 對話／問答／摘要／稱號的備援 | `deepseek-v4-pro` |
+| `FALLBACK_LIGHT_MODEL` | 問答關鍵字／分析的備援 | `deepseek-v4.1-flash` |
 
-高頻、要好笑的用途用付費強模型，背景批次工作用免費模型；整體一週約 75 次 LLM 呼叫。
+品質優先，全部用 `gpt-6.1-sol`（每把 key 每週 $10 額度，付費模型同時 2 個請求，所以批次分析並發設 2）。
+
+CGU key 依任務分工（`llm_keys.py`）：每類任務先用自己的 key，遇到額度用完／限流／金鑰無效就換另一把，全部失敗才改用 `FALLBACK_*`；timeout 不換 key、直接改用備援。
+
+| 環境變數 | 任務 |
+|----------|------|
+| `CHAT_API_KEY` | 即時：插嘴、@提及、問答、摘要、畢業倒數 |
+| `ANALYSIS_API_KEY` | 每日主題分析、情緒分析（凌晨跑） |
+| `JOBS_API_KEY` | 精選金句、每週稱號（凌晨跑） |
 
 **步驟 E：自動排程**
 
@@ -119,8 +127,7 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 | 每日 03:30 | 主群新訊息增量寫入 `group_memory` 向量庫 | |
 | 每日 04:00 | 聚合前一日的 `daily_user_stats` / `user_lifetime_stats` / group-level `daily_stats` | |
 | 每日 04:30 | 預先重算精選金句（全部／今年／本月） | |
-| 每月 1 號 03:00 | 對已收集訊息跑 LLM 主題 / 旅行偵測，回寫 `messages` 表 | |
-| 每月 1 號 03:30 | 視窗式情緒分析（只處理新視窗） | |
+| 每日 02:30 | 新訊息的 LLM 主題／關鍵字／旅行偵測，接著補情緒視窗（只處理新的）；金句、健康指數、話題頁都靠它 | |
 | 每週日 03:00 | 自動爬取最新 PTT 八卦板文章並重建 ChromaDB 索引 | |
 | 每週日 04:00 | 自動稱號：替每位成員取暫時稱號寫入 `aliases.json` | |
 
@@ -171,7 +178,7 @@ npm run build                   # 生產：vue-tsc + vite build → dist/
 **路由總覽**：
 | 路由 | 頁面 | 內容 |
 |------|------|------|
-| `/` | 群組總覽 | 總訊息、成員、預計進行的行程、活躍天數、Top 5 話癆（佔全群比例）、每週／每月趨勢、活躍熱力圖、訊息類型 |
+| `/` | 群組總覽 | 總訊息、成員、預計進行的行程（還沒結束的）、群組健康指數（跟群組自己的過去比，平常＝70）、活躍天數、Top 5 話癆（佔全群比例）、每週／每月趨勢、活躍熱力圖、訊息類型 |
 | `/leaderboard` | 排行榜 | 16 種趣味排行（第 1 名封面、2–3 名銀銅牌、其餘比例條），支援 `?board=` 直達 |
 | `/pulse` | 群組脈動 | 群組回應速度、閃電神回手排行、話題爆發時段（平均的幾倍）、潛水員偵測 |
 | `/interactions` | 互動關係 | 最佳拍檔 + D3 力導向互動網絡圖 |
@@ -194,7 +201,7 @@ npm run build                   # 生產：vue-tsc + vite build → dist/
 - `trip_types.py` — 旅行分類（校園回憶、經典名場面、聚會派對、運動競技、雪地滑雪…）
 - `badges.py` — 依地點 + 旅行天數 + 參與人數計算稀有度（普通 / 稀有 / 極稀有 / 史詩 / 傳說），自動發徽章
 - `aggregator.py` — 每日 / 終身統計聚合
-- `llm_analyzer.py` — 每月 LLM 主題 / 旅行偵測
+- `llm_analyzer.py` — 每日 LLM 主題 / 關鍵字 / 旅行偵測
 - `sentiment_windows.py` — 視窗式情緒分析（10 分鐘內最多 4 則帶上下文判情緒）
 - `quotes.py` — 精選金句（規則候選 + LLM 評審，每日快取）
 - `leaderboards.py` — 16 種趣味排行榜
@@ -250,7 +257,7 @@ Sassy-PTT-Bot/
 │   ├── trip_types.py           # 旅行分類
 │   ├── badges.py               # 稀有度計算 + 自動發徽章
 │   ├── aggregator.py           # 每日 / 終身 / group-level 聚合
-│   ├── llm_analyzer.py         # 每月 LLM 主題分析
+│   ├── llm_analyzer.py         # 每日 LLM 主題分析
 │   ├── sentiment_windows.py    # 視窗式情緒分析
 │   ├── quotes.py               # 精選金句
 │   ├── leaderboards.py         # 16 種趣味排行榜
@@ -262,6 +269,7 @@ Sassy-PTT-Bot/
 ├── PRODUCT.md                  # 產品定位（使用者、語氣）
 ├── DESIGN.md                   # LIFF 紀念冊設計規範
 ├── corpus_config.py            # 語料與群組記憶設定、別名與重大事件載入
+├── llm_keys.py                 # CGU 金鑰分工與自動換 key
 ├── indexer.py                  # PTT 語料 → ChromaDB 索引
 ├── index_group_memory.py       # 群組歷史對話視窗 → ChromaDB 索引 (group_memory)
 ├── scripts/
@@ -327,7 +335,7 @@ python indexer.py
 
 - Python 3.11+
 - Node.js 18+（LIFF 前端開發）
-- 一個 OpenAI 相容的 LLM 端點（學校 API、CLIProxyAPI、其他中轉站皆可），建議再準備一個不同供應商的當備援
+- 一個 OpenAI 相容的 LLM 端點（預設 CGU MercuryAPI），再準備一個不同供應商的當備援（預設 RaygoAI 的 DeepSeek）
 
 ```bash
 python -m venv venv
@@ -354,27 +362,28 @@ MAIN_LINE_GROUP_ID=your_main_line_group_id
 # 次要群組：只接收 graduation 倒數 + 一般統計戰報，本身無訊息記憶
 LINE_GROUP_ID=your_secondary_line_group_id
 
-# LLM — Primary（任一 OpenAI 相容端點，所有用途都走這裡）
-CLI_PROXY_BASE_URL=https://your-llm-endpoint/v1
+# LLM — Primary（任一 OpenAI 相容端點，所有用途都走這裡；預設 CGU MercuryAPI）
+CLI_PROXY_BASE_URL=https://air.cgu.edu.tw/cgullmapi/v1
 CLI_PROXY_API_KEY=your_api_key
 PRIMARY_MODEL=gpt-6.1-sol
 QA_MODEL=gpt-6.1-sol
 SUMMARY_MODEL=gpt-6.1-sol
 QUOTES_MODEL=gpt-6.1-sol
-QA_INTENT_MODEL=gemma-4-26b-a4b-it
-ANALYZER_MODEL=gemma-4-26b-a4b-it
-SENTIMENT_MODEL=gemma-4-26b-a4b-it
-NICKNAME_MODEL=gemma-4-26b-a4b-it
+QA_INTENT_MODEL=gpt-6.1-sol
+ANALYZER_MODEL=gpt-6.1-sol
+SENTIMENT_MODEL=gpt-6.1-sol
+NICKNAME_MODEL=gpt-6.1-sol
 
-# LLM — Fallback（對話／問答／摘要；建議不同供應商，沒設時沿用 CGU_LLM_*）
-FALLBACK_BASE_URL=https://your-fallback-endpoint/v1
+# CGU 金鑰分工（沒設就都用 CLI_PROXY_API_KEY）
+CHAT_API_KEY=sk-mercury-...
+ANALYSIS_API_KEY=sk-mercury-...
+JOBS_API_KEY=sk-mercury-...
+
+# LLM — Fallback（不同供應商；預設 RaygoAI）
+FALLBACK_BASE_URL=https://raygoai.cc/v1
 FALLBACK_API_KEY=your_fallback_key
-FALLBACK_MODEL=deepseek-v4.1-flash
-
-# LLM — CGU 學術 API（分析與稱號的備援）
-CGU_LLM_BASE_URL=https://air.cgu.edu.tw/cgullmapi/v1
-CGU_LLM_API_KEY=your_cgu_api_key
-CGU_LLM_MODEL=gpt-6-luna
+FALLBACK_MODEL=deepseek-v4-pro             # 對話／問答／摘要／稱號
+FALLBACK_LIGHT_MODEL=deepseek-v4.1-flash   # 問答關鍵字／分析
 
 # 單次 LLM 請求 timeout（秒，預設 15）
 LLM_TIMEOUT=25.0
@@ -416,8 +425,8 @@ tail -f bot.log
 
 啟動成功會看到：
 ```
-[LLM] Primary: gpt-6.1-sol @ https://<your-llm-endpoint>/v1
-[LLM] Fallback: deepseek-v4.1-flash @ https://<your-fallback-endpoint>/v1
+[LLM] Primary: gpt-6.1-sol @ https://air.cgu.edu.tw/cgullmapi/v1
+[LLM] Fallback: deepseek-v4-pro @ https://raygoai.cc/v1
 LINE Bot 已啟用
 [TRAVEL] SQLite 已初始化並完成 migration
 [GRADUATION] 排程已啟動，目標群組: ...

@@ -248,6 +248,20 @@ def test_interactions_endpoint(client, temp_db):
     assert "best_pairs" in data and "network_nodes" in data
 
 
+def test_interactions_nodes_have_line_pictures(client, temp_db, monkeypatch):
+    import line_bot.liff_api as api
+    monkeypatch.setattr(api, "_get_member_picture", lambda g, u: f"https://pic/{u}")
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT INTO messages (line_message_id, group_id, user_id, user_name, type, timestamp) VALUES (?,?,?,?,?,?)",
+            ("mp1", "gTest", "uMember", "Member", "text", 1000000),
+        )
+    res = client.get("/liff/interactions",
+                     headers={"X-LIFF-UserId": "uMember", "X-LIFF-GroupId": "gTest"})
+    nodes = res.get_json()["network_nodes"]
+    assert nodes and nodes[0]["picture_url"] == "https://pic/uMember"
+
+
 def test_topics_endpoint(client, temp_db):
     with get_conn() as conn:
         conn.execute(
@@ -342,6 +356,7 @@ def test_nicknames_only_for_main_group(client, monkeypatch, tmp_path):
         "Other": {"aliases": ["阿O"]},
     }, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(corpus_config, "ALIASES_FILE_PATH", p)
+    monkeypatch.delenv("LIFF_CHANNEL_ID", raising=False)   # 單獨跑時 import corpus_config 會重載 .env
     headers = {**_headers(), "X-LIFF-GroupId": "C1"}
 
     monkeypatch.setenv("MAIN_LINE_GROUP_ID", "C1")

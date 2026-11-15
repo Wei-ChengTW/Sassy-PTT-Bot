@@ -132,10 +132,70 @@ def test_weekly_trend_structure(db):
     assert isinstance(wt["weeks"], list)
 
 
-def test_active_trips_excludes_future_and_ended(db):
+def test_active_trips_counts_upcoming_and_ongoing_but_not_ended(db):
     from travel.stats import get_dashboard_data
     now = int(time.time())
     create_trip("C1", "進行中", "x", now - 86400, None, "U1")
     create_trip("C1", "規劃中", "x", now + 86400 * 30, None, "U1")
     end_trip(create_trip("C1", "已結束", "x", now - 86400 * 10, None, "U1"))
-    assert get_dashboard_data("C1")["summary"]["active_trips"] == 1
+    assert get_dashboard_data("C1")["summary"]["active_trips"] == 2
+
+
+def _msg(i, ts, user="U1", sentiment=None, keywords=None):
+    from travel.db import insert_message, get_conn
+    insert_message({
+        "line_message_id": f"h{i}", "group_id": "C1", "user_id": user, "user_name": user,
+        "type": "text", "content": "哈囉哈囉", "metadata": {}, "reply_to_message_id": None,
+        "timestamp": ts,
+    })
+    if sentiment is not None or keywords is not None:
+        import json
+        with get_conn() as c:
+            c.execute("UPDATE messages SET sentiment=?, keywords=? WHERE line_message_id=?",
+                      (sentiment, json.dumps(keywords) if keywords else None, f"h{i}"))
+
+
+def test_health_relative_to_baseline(db):
+    """跟平常一樣 → 約 70；比平常多一倍 → 活躍度 100。"""
+    import time
+    from travel.db import get_conn
+    from travel.stats import _compute_group_health
+    now = int(time.time() * 1000)
+    day = 86_400_000
+    i = 0
+    # 基準期（前 90 天）每天 2 則，最近 30 天每天 4 則
+    for d in range(120):
+        for _ in range(4 if d < 30 else 2):
+            _msg(i, now - d * day - 1000 - i, user=f"U{i % 3}")
+            i += 1
+    with get_conn() as c:
+        h = _compute_group_health(c, "C1", "all", now_ms=now)
+    assert h["window"] == "最近 30 天"
+    assert h["activity"] == 100
+    assert h["participation"] == 100
+    assert h["sentiment"] is None and h["diversity"] is None
+
+
+def test_health_sentiment_drop_scores_low(db):
+    import time
+    from travel.db import get_conn
+    from travel.stats import _compute_group_health
+    now = int(time.time() * 1000)
+    day = 86_400_000
+    i = 0
+    for d in range(120):
+        _msg(i, now - d * day - 1000, sentiment=-0.2 if d < 30 else 0.2)
+        i += 1
+    with get_conn() as c:
+        h = _compute_group_health(c, "C1", "all", now_ms=now)
+    assert h["activity"] == 70          # 每天一則，跟平常一樣
+    assert h["sentiment"] == 0          # 差 −0.4，壓到 0
+    assert any("氣氛" in s for s in h["suggestions"])
+
+
+def test_health_without_messages(db):
+    from travel.db import get_conn
+    from travel.stats import _compute_group_health
+    with get_conn() as c:
+        h = _compute_group_health(c, "C1", "all")
+    assert h is not None and h["activity"] == 0   # 完全沒訊息：活躍度 0、其他略過
