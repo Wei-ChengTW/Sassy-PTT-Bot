@@ -25,7 +25,7 @@ from pathlib import Path
 import chromadb
 from chromadb.utils import embedding_functions
 
-_PROJECT_ROOT = Path(__file__).resolve().parent
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(_PROJECT_ROOT))
 
 from corpus_config import (

@@ -8,7 +8,9 @@ from sentence_transformers import SentenceTransformer
 from chromadb.utils import embedding_functions
 
 # --- Configuration ---
-_PROJECT_ROOT = Path(__file__).resolve().parent
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+import sys
+sys.path.insert(0, str(_PROJECT_ROOT))
 from corpus_config import EMBEDDING_MODEL_NAME, CHROMA_DB_PATH
 
 DATA_DIR = str(_PROJECT_ROOT / "PTT-Crawler-master" / "data_Gossiping_2025")

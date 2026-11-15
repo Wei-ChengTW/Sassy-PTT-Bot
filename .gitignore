@@ -3,6 +3,7 @@
 *.env
 # .env 備份 / 變體（避免 `.env.env.bak.*` 這類檔名再次 commit 進去）
 *.env.*
+.env-backups/
 !*.env.example
 !liff/.env.liff.example
 
@@ -26,6 +27,7 @@ raw_message/
 
 # 日誌
 bot.log
+bot.log.*
 nohup.out
 
 # 其他

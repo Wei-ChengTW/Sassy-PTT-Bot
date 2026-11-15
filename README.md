@@ -270,9 +270,9 @@ Sassy-PTT-Bot/
 ├── DESIGN.md                   # LIFF 紀念冊設計規範
 ├── corpus_config.py            # 語料與群組記憶設定、別名與重大事件載入
 ├── llm_keys.py                 # CGU 金鑰分工與自動換 key
-├── indexer.py                  # PTT 語料 → ChromaDB 索引
-├── index_group_memory.py       # 群組歷史對話視窗 → ChromaDB 索引 (group_memory)
 ├── scripts/
+│   ├── indexer.py              # PTT 語料 → ChromaDB 索引（每週日 03:00 爬蟲後自動跑）
+│   ├── index_group_memory.py   # 群組歷史對話視窗 → ChromaDB 索引 (group_memory，每日 03:30 增量)
 │   ├── import_line_export.py   # LINE 匯出文字紀錄匯入資料庫
 │   ├── import_memories.py      # 匯入群組回憶（冪等去重）
 │   ├── seed_members.py         # 建立成員資料
@@ -285,7 +285,8 @@ Sassy-PTT-Bot/
 │   ├── events.json             # 群組歷史重大事件百科（可選）
 │   ├── news_cache.json         # 每日新聞快取
 │   └── graduation_state.json   # 倒數推送狀態
-├── PTT-Crawler-master/         # PTT 爬蟲（submodule）
+├── seed/                       # 範例資料（*.example.json，真實名單不入 repo）
+├── PTT-Crawler-master/         # PTT 爬蟲程式
 │   ├── data_Gossiping_2025/    # 原始 JSON 語料（不入 repo）
 │   └── chroma_db/              # 向量資料庫（不入 repo）
 ├── docs/superpowers/
@@ -320,10 +321,10 @@ Sassy-PTT-Bot/
 ### 步驟 2：建立向量索引
 ```bash
 source venv/bin/activate
-python indexer.py
+python scripts/indexer.py
 ```
 
-執行完成會在 `PTT-Crawler-master/chroma_db/` 建立向量資料庫，預設最多索引 100,000 筆（可在 `indexer.py` 的 `MAX_DOCUMENTS` 調整）。啟動後每週日 03:00 會自動增量爬取並重建索引。
+執行完成會在 `PTT-Crawler-master/chroma_db/` 建立向量資料庫，預設最多索引 100,000 筆（可在 `scripts/indexer.py` 的 `MAX_DOCUMENTS` 調整）。啟動後每週日 03:00 會自動增量爬取並重建索引。
 
 > 語料越多、涵蓋話題越廣，RAG 檢索效果越好。建議至少準備 **5 萬筆以上**的推文。
 

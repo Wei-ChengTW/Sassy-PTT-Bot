@@ -1804,7 +1804,7 @@ class SassyBrain:
         """每週日凌晨 3:00 自動爬取近 8 天 PTT 新文章並重建向量索引。"""
         project_root = Path(__file__).resolve().parents[1]
         crawler_dir = project_root / "PTT-Crawler-master"
-        indexer_script = project_root / "indexer.py"
+        indexer_script = project_root / "scripts" / "indexer.py"
         target_date = (date.today() - timedelta(days=8)).isoformat()
 
         logger.info(f"[WEEKLY_CRAWL] 開始爬取 PTT（target_date={target_date}）...")
@@ -1840,7 +1840,7 @@ class SassyBrain:
         """每日 03:30 增量把主群新訊息補進 group_memory 向量庫。"""
         logger.info("[GROUP_MEMORY] 開始增量更新群組記憶...")
         try:
-            from index_group_memory import run as run_group_memory
+            from scripts.index_group_memory import run as run_group_memory
             run_group_memory(rebuild=False)
             logger.info(f"[GROUP_MEMORY] 更新完成，目前 {self.group_collection.count()} 筆視窗。")
         except Exception as e:
