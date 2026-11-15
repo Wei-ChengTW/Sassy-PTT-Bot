@@ -8,12 +8,13 @@ from llm_keys import is_key_problem, key_pool
 
 @pytest.fixture
 def keys(monkeypatch):
-    for name in ("CHAT_API_KEY", "ANALYSIS_API_KEY", "JOBS_API_KEY", "CLI_PROXY_API_KEY"):
+    for name in ("CHAT_API_KEY", "ANALYSIS_API_KEY", "JOBS_API_KEY",
+                 "CGU_LLM_API_KEY", "CGU_LLM_API_KEY_2", "CGU_LLM_API_KEY_3"):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("CHAT_API_KEY", "k-chat")
     monkeypatch.setenv("ANALYSIS_API_KEY", "k-analysis")
     monkeypatch.setenv("JOBS_API_KEY", "k-jobs")
-    monkeypatch.setenv("CLI_PROXY_API_KEY", "k-chat")   # 跟 CHAT 同一把 → 去重
+    monkeypatch.setenv("CGU_LLM_API_KEY_2", "k-chat")   # 跟 CHAT 同一把 → 去重
 
 
 def test_key_pool_puts_role_key_first_and_dedupes(keys):
@@ -22,10 +23,10 @@ def test_key_pool_puts_role_key_first_and_dedupes(keys):
     assert key_pool("chat") == ["k-chat", "k-jobs", "k-analysis"]
 
 
-def test_key_pool_falls_back_to_main_key(monkeypatch):
-    for name in ("CHAT_API_KEY", "ANALYSIS_API_KEY", "JOBS_API_KEY"):
+def test_key_pool_falls_back_to_cgu_keys(monkeypatch):
+    for name in ("CHAT_API_KEY", "ANALYSIS_API_KEY", "JOBS_API_KEY", "CGU_LLM_API_KEY_2", "CGU_LLM_API_KEY_3"):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("CLI_PROXY_API_KEY", "only")
+    monkeypatch.setenv("CGU_LLM_API_KEY", "only")
     assert key_pool("analysis") == ["only"]
 
 

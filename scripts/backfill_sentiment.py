@@ -31,8 +31,8 @@ from corpus_config import (  # noqa: E402
     MAIN_GROUP_ID, GROUP_WINDOW_GAP_SEC, GROUP_WINDOW_MAX_MSGS, GROUP_MIN_WINDOW_CHARS,
 )
 
-BASE = os.getenv("CLI_PROXY_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
-KEY = os.getenv("ANALYSIS_API_KEY") or os.getenv("CLI_PROXY_API_KEY", "")
+BASE = os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
+KEY = os.getenv("ANALYSIS_API_KEY") or os.getenv("CGU_LLM_API_KEY", "")
 MODEL = os.getenv("SENTIMENT_MODEL", "gpt-6.1-sol")
 WINDOWS_PER_CALL = 12
 

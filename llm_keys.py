@@ -1,6 +1,6 @@
 """CGU 金鑰分工：每類任務先用自己的 key，遇到額度用完／限流／金鑰無效再換下一把。
 
-.env 設定（沒設的會略過，全部沒設就只用 CLI_PROXY_API_KEY）：
+.env 設定（三把 key 放在 CGU_LLM_API_KEY / _2 / _3，各任務用 ${...} 指過去；沒設的會略過）：
     CHAT_API_KEY      即時：插嘴、@提及、問答、摘要、畢業倒數
     ANALYSIS_API_KEY  每日主題分析、情緒分析
     JOBS_API_KEY      精選金句、每週稱號
@@ -17,13 +17,14 @@ ROLE_KEY_ENV = {
     "analysis": "ANALYSIS_API_KEY",
     "jobs": "JOBS_API_KEY",
 }
-_POOL_ORDER = ("CHAT_API_KEY", "JOBS_API_KEY", "ANALYSIS_API_KEY", "CLI_PROXY_API_KEY")
+_POOL_ORDER = ("CHAT_API_KEY", "JOBS_API_KEY", "ANALYSIS_API_KEY",
+               "CGU_LLM_API_KEY", "CGU_LLM_API_KEY_2", "CGU_LLM_API_KEY_3")
 
 _KEY_PROBLEM_WORDS = ("429", "rate limit", "quota", "insufficient", "額度", "invalid_api_key", "invalid api key")
 
 
 def base_url() -> str:
-    return os.getenv("CLI_PROXY_BASE_URL") or CGU_BASE_URL
+    return os.getenv("CGU_LLM_BASE_URL") or CGU_BASE_URL
 
 
 def key_pool(role: str) -> list[str]:

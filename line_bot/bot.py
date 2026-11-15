@@ -60,8 +60,7 @@ except ImportError:
 # --- 3. 配置 ---
 
 # Primary：CGU MercuryAPI，品質優先全部用 gpt-6.1-sol；key 依任務分工見 llm_keys.py
-CLI_PROXY_BASE_URL = os.getenv("CLI_PROXY_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
-CLI_PROXY_API_KEY = os.getenv("CLI_PROXY_API_KEY", "")
+CGU_LLM_BASE_URL = os.getenv("CGU_LLM_BASE_URL", "https://air.cgu.edu.tw/cgullmapi/v1")
 PRIMARY_MODEL = os.getenv("PRIMARY_MODEL", "gpt-6.1-sol")
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "15.0"))
 
@@ -324,13 +323,13 @@ class SassyBrain:
         from llm_keys import key_pool
         chat_keys = key_pool("chat")
         self.primary_model = PRIMARY_MODEL
-        self.primary_clients = [AsyncOpenAI(api_key=k, base_url=CLI_PROXY_BASE_URL) for k in chat_keys]
+        self.primary_clients = [AsyncOpenAI(api_key=k, base_url=CGU_LLM_BASE_URL) for k in chat_keys]
         if self.primary_clients:
             self.primary_client = self.primary_clients[0]
-            logger.info(f"[LLM] Primary: {PRIMARY_MODEL} @ {CLI_PROXY_BASE_URL}（{len(chat_keys)} 把 key 輪替）")
+            logger.info(f"[LLM] Primary: {PRIMARY_MODEL} @ {CGU_LLM_BASE_URL}（{len(chat_keys)} 把 key 輪替）")
         else:
             self.primary_client = None
-            logger.warning("[LLM] CLI_PROXY_API_KEY 未設定，primary 停用")
+            logger.warning("[LLM] 沒有任何 CGU key（CHAT_API_KEY / CGU_LLM_API_KEY*），primary 停用")
         if FALLBACK_API_KEY:
             self.fallback_client = AsyncOpenAI(api_key=FALLBACK_API_KEY, base_url=FALLBACK_BASE_URL)
             self.fallback_model = FALLBACK_MODEL

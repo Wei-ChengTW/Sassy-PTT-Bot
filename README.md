@@ -33,7 +33,7 @@
 
 | 元件 | 技術 |
 |------|------|
-| LLM（Primary） | CGU MercuryAPI（`CLI_PROXY_BASE_URL`，OpenAI 相容），所有用途都用旗艦 `gpt-6.1-sol`；三把 key 依任務分工（聊天／背景分析／金句與稱號），額度或限流時自動換另一把（`llm_keys.py`） |
+| LLM（Primary） | CGU MercuryAPI（`CGU_LLM_BASE_URL`，OpenAI 相容），所有用途都用旗艦 `gpt-6.1-sol`；三把 key 依任務分工（聊天／背景分析／金句與稱號），額度或限流時自動換另一把（`llm_keys.py`） |
 | LLM（Fallback） | 不同供應商的 DeepSeek（`FALLBACK_*`），Primary 掛掉時自動切換：強用途用 `deepseek-v4-pro`，背景工作用 `deepseek-v4.1-flash` |
 | LLM 共通 | 單次 timeout（`LLM_TIMEOUT`，目前 25s）+ 429 retry 3 次 |
 | 向量資料庫 | ChromaDB（含 PTT 語料與群組對話記憶 `group_memory` 雙 collection） |
@@ -85,7 +85,7 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 
 **步驟 D：LLM 雙 Provider**
 
-- 先試 **PRIMARY**（`CLI_PROXY_BASE_URL` + 該用途的模型，見下表），timeout 為 `LLM_TIMEOUT`
+- 先試 **PRIMARY**（`CGU_LLM_BASE_URL` + 該用途的模型，見下表），timeout 為 `LLM_TIMEOUT`
 - 失敗（timeout / 連線錯誤 / 全部 429 重試耗盡）→ 自動切到 **FALLBACK**（`FALLBACK_BASE_URL`，用不同供應商，避免同時掛掉）
 - 兩邊都掛 → 回「懶得理你，自己想。」
 - 觸發 semaphore：`@mention` 走 2-slot semaphore（避免 reply_token 過期），自發觸發走 `non-blocking lock`（搶不到就跳過）
@@ -363,8 +363,7 @@ MAIN_LINE_GROUP_ID=your_main_line_group_id
 LINE_GROUP_ID=your_secondary_line_group_id
 
 # LLM — Primary（任一 OpenAI 相容端點，所有用途都走這裡；預設 CGU MercuryAPI）
-CLI_PROXY_BASE_URL=https://air.cgu.edu.tw/cgullmapi/v1
-CLI_PROXY_API_KEY=your_api_key
+CGU_LLM_BASE_URL=https://air.cgu.edu.tw/cgullmapi/v1
 PRIMARY_MODEL=gpt-6.1-sol
 QA_MODEL=gpt-6.1-sol
 SUMMARY_MODEL=gpt-6.1-sol
@@ -374,10 +373,13 @@ ANALYZER_MODEL=gpt-6.1-sol
 SENTIMENT_MODEL=gpt-6.1-sol
 NICKNAME_MODEL=gpt-6.1-sol
 
-# CGU 金鑰分工（沒設就都用 CLI_PROXY_API_KEY）
-CHAT_API_KEY=sk-mercury-...
-ANALYSIS_API_KEY=sk-mercury-...
-JOBS_API_KEY=sk-mercury-...
+# CGU 三把 key，各任務用 ${...} 指過去（見 llm_keys.py）
+CGU_LLM_API_KEY=sk-mercury-...
+CGU_LLM_API_KEY_2=sk-mercury-...
+CGU_LLM_API_KEY_3=sk-mercury-...
+CHAT_API_KEY=${CGU_LLM_API_KEY_2}
+ANALYSIS_API_KEY=${CGU_LLM_API_KEY_3}
+JOBS_API_KEY=${CGU_LLM_API_KEY}
 
 # LLM — Fallback（不同供應商；預設 RaygoAI）
 FALLBACK_BASE_URL=https://raygoai.cc/v1
