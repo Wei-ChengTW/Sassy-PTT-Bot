@@ -33,9 +33,9 @@
 
 | 元件 | 技術 |
 |------|------|
-| LLM（Primary） | `gemini-3.6-flash-high` via CLIProxyAPI `http://localhost:8317/v1` |
-| LLM（Fallback） | `gpt-5-mini` via CGU API（Primary 掛掉時自動切換） |
-| LLM 共通 | 15s 單次 timeout + 429 retry 3 次 |
+| LLM（Primary） | 任一 OpenAI 相容端點（`CLI_PROXY_BASE_URL`），依用途分模型：對話／問答／摘要／金句用 `gpt-6.1-sol`，分析／情緒／稱號／問答關鍵字用免費的 `gemma-4-26b-a4b-it` |
+| LLM（Fallback） | 不同供應商的 `deepseek-v4.1-flash`（`FALLBACK_*`），Primary 掛掉時自動切換；分析與稱號則退回 `CGU_LLM_*` |
+| LLM 共通 | 單次 timeout（`LLM_TIMEOUT`，目前 25s）+ 429 retry 3 次 |
 | 向量資料庫 | ChromaDB（含 PTT 語料與群組對話記憶 `group_memory` 雙 collection） |
 | 嵌入模型 | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`（多語，中文檢索較準） |
 | LINE 框架 | `line-bot-sdk` v3 + Flask webhook |
@@ -85,10 +85,27 @@ Bot 不會對每則訊息回應，模擬真實鄉民的「隨緣」：
 
 **步驟 D：LLM 雙 Provider**
 
-- 先試 **PRIMARY**（CLIProxyAPI / `gemini-3.6-flash-high`），timeout 15s
-- 失敗（timeout / 連線錯誤 / 全部 429 重試耗盡）→ 自動切到 **FALLBACK**（CGU / `gpt-5-mini`）
+- 先試 **PRIMARY**（`CLI_PROXY_BASE_URL` + 該用途的模型，見下表），timeout 為 `LLM_TIMEOUT`
+- 失敗（timeout / 連線錯誤 / 全部 429 重試耗盡）→ 自動切到 **FALLBACK**（`FALLBACK_BASE_URL` / `FALLBACK_MODEL`，建議用不同供應商，避免同時掛掉；沒設時沿用 `CGU_LLM_*`）
 - 兩邊都掛 → 回「懶得理你，自己想。」
 - 觸發 semaphore：`@mention` 走 2-slot semaphore（避免 reply_token 過期），自發觸發走 `non-blocking lock`（搶不到就跳過）
+
+各用途的模型都可用環境變數個別指定（目前設定）：
+
+| 環境變數 | 用途 | 目前模型 |
+|----------|------|----------|
+| `PRIMARY_MODEL` | 毒舌對話（插嘴、@提及、私訊）、畢業倒數文案 | `gpt-6.1-sol` |
+| `QA_MODEL` | 群組問答的回答 | `gpt-6.1-sol` |
+| `SUMMARY_MODEL` | 聊天摘要 | `gpt-6.1-sol` |
+| `QUOTES_MODEL` | 精選金句 LLM 評審 | `gpt-6.1-sol` |
+| `QA_INTENT_MODEL` | 群組問答抽關鍵字（要快） | `gemma-4-26b-a4b-it` |
+| `ANALYZER_MODEL` | 每月主題／旅行偵測 | `gemma-4-26b-a4b-it` |
+| `SENTIMENT_MODEL` | 視窗式情緒分析 | `gemma-4-26b-a4b-it` |
+| `NICKNAME_MODEL` | 每週自動稱號 | `gemma-4-26b-a4b-it` |
+| `FALLBACK_MODEL` | 對話／問答／摘要備援 | `deepseek-v4.1-flash` |
+| `CGU_LLM_MODEL` | 分析與稱號的備援 | `gpt-6-luna` |
+
+高頻、要好笑的用途用付費強模型，背景批次工作用免費模型；整體一週約 75 次 LLM 呼叫。
 
 **步驟 E：自動排程**
 
@@ -221,8 +238,8 @@ Sassy-PTT-Bot/
 │   ├── src/
 │   │   ├── views/              # 各頁面（見上方路由表）
 │   │   ├── components/         # PageSign / RankList / FoilCard / RaritySeal / Heatmap…
-│   │   ├── constants/          # rarity.ts（稀有度）、chartColors.ts（圖表色）
-│   │   ├── utils/              # flexTripCard / flexQuoteCard / flexCountdownCard（以本人名義發送的小卡）、ago.ts
+│   │   ├── constants/          # rarity / tripTypes / tripStatus / locations / chartColors
+│   │   ├── utils/              # flexTripCard / flexQuoteCard / flexCountdownCard（以本人名義發送的小卡）、liffShare、rank、ago
 │   │   ├── api/client.ts       # API client wrapper
 │   │   ├── stores/, router.ts, App.vue, main.ts, style.css
 │   ├── package.json            # v5 d3 / chart.js 4 / vue-chartjs 5
@@ -310,7 +327,7 @@ python indexer.py
 
 - Python 3.11+
 - Node.js 18+（LIFF 前端開發）
-- CLIProxyAPI（選填，推薦，本機 proxy 跑 Gemini）— 參考對應 repo 安裝步驟
+- 一個 OpenAI 相容的 LLM 端點（學校 API、CLIProxyAPI、其他中轉站皆可），建議再準備一個不同供應商的當備援
 
 ```bash
 python -m venv venv
@@ -337,19 +354,35 @@ MAIN_LINE_GROUP_ID=your_main_line_group_id
 # 次要群組：只接收 graduation 倒數 + 一般統計戰報，本身無訊息記憶
 LINE_GROUP_ID=your_secondary_line_group_id
 
-# LLM — Primary（推薦，CLIProxyAPI 本機 proxy）
-CLI_PROXY_BASE_URL=http://localhost:8317/v1
-CLI_PROXY_API_KEY=your_cliproxy_api_key
-PRIMARY_MODEL=gemini-3.6-flash-high
+# LLM — Primary（任一 OpenAI 相容端點，所有用途都走這裡）
+CLI_PROXY_BASE_URL=https://your-llm-endpoint/v1
+CLI_PROXY_API_KEY=your_api_key
+PRIMARY_MODEL=gpt-6.1-sol
+QA_MODEL=gpt-6.1-sol
+SUMMARY_MODEL=gpt-6.1-sol
+QUOTES_MODEL=gpt-6.1-sol
+QA_INTENT_MODEL=gemma-4-26b-a4b-it
+ANALYZER_MODEL=gemma-4-26b-a4b-it
+SENTIMENT_MODEL=gemma-4-26b-a4b-it
+NICKNAME_MODEL=gemma-4-26b-a4b-it
 
-# LLM — Fallback（CGU 學術 API，Primary 掛掉時切換）
+# LLM — Fallback（對話／問答／摘要；建議不同供應商，沒設時沿用 CGU_LLM_*）
+FALLBACK_BASE_URL=https://your-fallback-endpoint/v1
+FALLBACK_API_KEY=your_fallback_key
+FALLBACK_MODEL=deepseek-v4.1-flash
+
+# LLM — CGU 學術 API（分析與稱號的備援）
+CGU_LLM_BASE_URL=https://air.cgu.edu.tw/cgullmapi/v1
 CGU_LLM_API_KEY=your_cgu_api_key
+CGU_LLM_MODEL=gpt-6-luna
 
 # 單次 LLM 請求 timeout（秒，預設 15）
-LLM_TIMEOUT=15.0
+LLM_TIMEOUT=25.0
 
 # LIFF
 LIFF_ID=your-liff-id
+# 設定後 /liff/* 每個請求都必須帶有效的 LINE ID token；本機開發可不設
+LIFF_CHANNEL_ID=your_liff_channel_id
 
 # 旅遊擴充
 TRAVEL_STORAGE_ENABLED=true
@@ -360,19 +393,31 @@ ADMIN_USER_IDS=user_id_1,user_id_2
 
 # 畢業倒數（選填）
 GRADUATION_DATE=2027-05-22
+
+# scripts/seed_members.py 用：群組成員 display_name，逗號分隔（避免把真名寫進 repo）
+LINE_GROUP_MEMBERS=Alice,Bob,Carol
 ```
 
 ### 啟動
 
 #### Bot
+
+正式環境以 systemd user 服務常駐（`~/.config/systemd/user/sassy-bot.service`，`ExecStart` 指向 `run_bot.sh`，掛掉 3 秒後自動重啟）：
+```bash
+systemctl --user restart sassy-bot.service   # 改完程式或 .env 後重啟
+systemctl --user status sassy-bot.service
+tail -f bot.log
+```
+
+本機手動跑：
 ```bash
 ./run_bot.sh
 ```
 
 啟動成功會看到：
 ```
-[LLM] Primary: gemini-3.6-flash-high @ http://localhost:8317/v1
-[LLM] Fallback: gpt-5-mini @ https://air.cgu.edu.tw/cgullmapi/v1
+[LLM] Primary: gpt-6.1-sol @ https://<your-llm-endpoint>/v1
+[LLM] Fallback: deepseek-v4.1-flash @ https://<your-fallback-endpoint>/v1
 LINE Bot 已啟用
 [TRAVEL] SQLite 已初始化並完成 migration
 [GRADUATION] 排程已啟動，目標群組: ...
